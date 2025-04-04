@@ -1,6 +1,6 @@
 # KrakenROV
 
-# Plan de configuracion y estructura del proyecto EcoHarmony_Park_G11_2025
+# Plan de configuracion y estructura del proyecto KrakenROV_PF_G5_2025
 
 Este plan describe la configuración y estructura del repositorio que se utilizará para el desarrollo en el tiempo con respecto al proyecto EcoHarmony_Park_G11_2025. El objetivo es establecer una organización clara de los archivos que se van a utilizar, así como un criterio de línea base que permita mantener un registro ordenado de las versiones a lo largo del curso.
 
