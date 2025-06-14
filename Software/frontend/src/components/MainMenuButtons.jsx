@@ -6,7 +6,7 @@ const MainMenuButtons = () => {
   return (
     <div style={containerStyle}>
       <button style={buttonStyle} onClick={() => navigate("/nueva-inspeccion")}>Iniciar inspección</button>
-      <button style={buttonStyle} onClick={() => navigate("/inspeccion")}>Inspecciones</button>
+      <button style={buttonStyle}>Inspecciones</button>
     </div>
   );
 };
