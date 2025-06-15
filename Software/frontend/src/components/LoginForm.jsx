@@ -30,7 +30,7 @@ const containerStyle = {
 };
 
 const iconStyle = {
-  width: "clamp(80px, 16vw, 160px)",
+  width: "clamp(80px, 16vw, 180px)",
   height: "clamp(80px, 16vw, 160px)",
 };
 
