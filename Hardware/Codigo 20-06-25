@@ -1,0 +1,166 @@
+#include <Wire.h>
+#include <LiquidCrystal_PCF8574.h>
+#include <DHT.h>
+#include <Adafruit_Sensor.h>
+
+// LCD con dirección confirmada 0x3F
+LiquidCrystal_PCF8574 lcd(0x3F);
+
+// Pines sensores
+#define TRIG_PIN 6
+#define ECHO_PIN 7
+#define DHTPIN A0
+#define DHTTYPE DHT11
+#define DISTANCIA_MINIMA 10.0
+
+// Motores
+#define IN1 8
+#define IN2 9
+#define IN3 10
+#define IN4 11
+
+// Botones
+#define BTN_FORWARD   2
+#define BTN_BACKWARD  3
+#define BTN_LEFT      4
+#define BTN_RIGHT     5
+
+// Joystick eje vertical
+//#define JOY_Y A0
+
+// Motores verticales (Driver B)
+//#define IN1 A1   // Motor 3
+//#define IN2 A2
+//#define IN3 A3   // Motor 4
+//#define IN4 13
+
+// DHT11 (reubicado)
+//#define DHTPIN 12
+//#define DHTTYPE DHT11
+//DHT dht(DHTPIN, DHTTYPE);
+
+
+DHT dht(DHTPIN, DHTTYPE);
+String estadoMotor = "Detenido";
+
+void setup() {
+  Serial.begin(9600);
+
+  // Motores
+  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
+
+  // Botones
+  pinMode(BTN_FORWARD, INPUT_PULLUP);
+  pinMode(BTN_BACKWARD, INPUT_PULLUP);
+  pinMode(BTN_LEFT, INPUT_PULLUP);
+  pinMode(BTN_RIGHT, INPUT_PULLUP);
+
+  // Sensor distancia
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  // Inicialización
+  dht.begin();
+  lcd.begin(16, 2);
+  lcd.setBacklight(255);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Iniciando...");
+  delay(1500);
+  lcd.clear();
+
+  stopMotors();
+}
+
+void loop() {
+  float distancia = medirDistancia();
+  float temperatura = dht.readTemperature();
+  float humedad = dht.readHumidity();
+
+  // Consola serial
+  Serial.print("Dist: ");
+  Serial.print(distancia);
+  Serial.print(" cm | Temp: ");
+  Serial.print(temperatura);
+  Serial.print(" C | Hum: ");
+  Serial.print(humedad);
+  Serial.println(" %");
+
+  // Control por obstáculo
+  if (distancia > 0 && distancia < DISTANCIA_MINIMA) {
+    stopMotors();
+    estadoMotor = "OBSTACULO";
+  } else {
+    bool fwd = digitalRead(BTN_FORWARD) == LOW;
+    bool back = digitalRead(BTN_BACKWARD) == LOW;
+    bool left = digitalRead(BTN_LEFT) == LOW;
+    bool right = digitalRead(BTN_RIGHT) == LOW;
+
+    if (fwd && !back && !left && !right) {
+      moveForward(); estadoMotor = "Adelante";
+    } else if (back && !fwd && !left && !right) {
+      moveBackward(); estadoMotor = "Atras";
+    } else if (left && !right && !fwd && !back) {
+      spinLeft(); estadoMotor = "Izquierda";
+    } else if (right && !left && !fwd && !back) {
+      spinRight(); estadoMotor = "Derecha";
+    } else {
+      stopMotors(); estadoMotor = "Detenido";
+    }
+  }
+
+  // LCD
+  lcd.setCursor(0, 0);
+  lcd.print("D:");
+  lcd.print(distancia, 1);
+  lcd.print("cm T:");
+  lcd.print(temperatura, 1);
+  lcd.print((char)223);  // símbolo de grado
+  lcd.print("C ");
+
+  lcd.setCursor(0, 1);
+  lcd.print("H:");
+  lcd.print(humedad, 0);
+  lcd.print("% ");
+  lcd.print(estadoMotor);
+  lcd.print("     ");
+
+  delay(700);
+}
+
+// FUNCIONES AUXILIARES
+
+float medirDistancia() {
+  digitalWrite(TRIG_PIN, LOW); delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH); delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  long duracion = pulseIn(ECHO_PIN, HIGH, 30000);
+  if (duracion == 0) return -1.0;
+  return duracion * 0.0343 / 2;
+}
+
+void moveForward() {
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
+}
+
+void moveBackward() {
+  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
+}
+
+void spinLeft() {
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
+}
+
+void spinRight() {
+  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
+}
+
+void stopMotors() {
+  digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
+}
