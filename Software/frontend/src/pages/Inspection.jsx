@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import InspectionPage from "../components/InspectionPage";
 
 const Inspection = () => {
   const [arduinoData, setArduinoData] = useState(null);
@@ -20,22 +21,7 @@ const Inspection = () => {
     return () => clearInterval(interval); // limpieza
   }, []);
 
-  return (
-    <div style={{ padding: "2rem" }}>
-      <h1>Inspección – Datos en Tiempo Real</h1>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      {arduinoData ? (
-        <ul>
-          <li>🌡️ Temperatura: {arduinoData.temperature} °C</li>
-          <li>💧 Humedad: {arduinoData.humidity} %</li>
-          <li>📏 Distancia: {arduinoData.distance} cm</li>
-          <li>⚙️ Motor: {arduinoData.motor}</li>
-        </ul>
-      ) : (
-        <p>Cargando datos...</p>
-      )}
-    </div>
-  );
+  return <InspectionPage arduinoData={arduinoData} error={error} />;
 };
 
 export default Inspection;

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const InspectionPage = () => {
+const InspectionPage = ({ arduinoData, error }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -89,7 +89,7 @@ const InspectionPage = () => {
         <button style={buttonStyle}>Capturar</button>
       </div>
       {/* Menú lateral */}
-      {menuOpen && <SideMenu onClose={() => setMenuOpen(false)} />}
+      {menuOpen && <SideMenu onClose={() => setMenuOpen(false)} arduinoData={arduinoData} error={error} />}
       <style>{`
         @media (max-width: 900px) {
           .side-menu {
@@ -150,7 +150,7 @@ const menuBtnStyle = {
   padding: 0,
 };
 
-const SideMenu = ({ onClose }) => (
+const SideMenu = ({ onClose, arduinoData, error }) => (
   <div className="side-menu" style={{ 
     position: "fixed", 
     top: 0, 
@@ -174,22 +174,38 @@ const SideMenu = ({ onClose }) => (
     </div>
     <hr style={{ margin: "12px 0", border: 0, borderTop: "2px solid #888" }} />
     <div style={{ fontFamily: 'Fira Mono, monospace', fontSize: 16, color: "#222" }}>
-      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src="/tiempo.png" alt="Tiempo" style={{ width: 22, height: 22 }} />
-        Tiempo: 45:39:10
-      </div>
-      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src="/temperatura.png" alt="Temperatura" style={{ width: 22, height: 22 }} />
-        Temperatura: 20°C | 68°F
-      </div>
-      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src="/depth.png" alt="Prof. Media" style={{ width: 22, height: 22 }} />
-        Prof. Media: 3.6 m
-      </div>
-      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <img src="/depth.png" alt="Prof. Máx." style={{ width: 22, height: 22 }} />
-        Prof. Máx.: 7.3 m
-      </div>
+      {error ? (
+        <div style={{ color: "red", marginBottom: 8 }}>
+          Error: {error}
+        </div>
+      ) : arduinoData ? (
+        <>
+          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/tiempo.png" alt="Tiempo" style={{ width: 22, height: 22 }} />
+            Tiempo: {new Date().toLocaleTimeString()}
+          </div>
+          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/temperatura.png" alt="Temperatura" style={{ width: 22, height: 22 }} />
+            Temperatura: {arduinoData.temperature}°C | {(arduinoData.temperature * 9/5 + 32).toFixed(1)}°F
+          </div>
+          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/depth.png" alt="Humedad" style={{ width: 22, height: 22 }} />
+            Humedad: {arduinoData.humidity}%
+          </div>
+          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/depth.png" alt="Distancia" style={{ width: 22, height: 22 }} />
+            Distancia: {arduinoData.distance} cm
+          </div>
+          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/depth.png" alt="Motor" style={{ width: 22, height: 22 }} />
+            Motor: {arduinoData.motor}
+          </div>
+        </>
+      ) : (
+        <div style={{ marginBottom: 8 }}>
+          Cargando datos del Arduino...
+        </div>
+      )}
     </div>
   </div>
 );
