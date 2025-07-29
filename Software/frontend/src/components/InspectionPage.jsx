@@ -1,9 +1,108 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import html2canvas from 'html2canvas';
 
 const InspectionPage = ({ arduinoData, error }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [captureCount, setCaptureCount] = useState(0);
+  const [lightsOn, setLightsOn] = useState(false);
+  const videoContainerRef = useRef(null);
   const navigate = useNavigate();
+
+  // Simular video independientemente del Arduino
+  const [videoTime, setVideoTime] = useState(0);
+
+  useEffect(() => {
+    let interval;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        setVideoTime(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying]);
+
+  const handleStart = () => {
+    setIsPlaying(true);
+  };
+
+  const handleStop = () => {
+    setIsPlaying(false);
+  };
+
+  const handleLights = () => {
+    setLightsOn(prev => !prev);
+  };
+
+  const handleCapture = async () => {
+    if (videoContainerRef.current) {
+      try {
+        const canvas = await html2canvas(videoContainerRef.current, {
+          backgroundColor: null,
+          scale: 2, // Mejor calidad
+          useCORS: true,
+          allowTaint: true,
+          logging: false
+        });
+        
+        // Convertir el canvas a blob y descargar
+        canvas.toBlob((blob) => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const filename = `captura_${timestamp}.png`;
+          
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          
+          setCaptureCount(prev => prev + 1);
+          
+          // Mostrar notificación de éxito
+          alert(`Captura guardada como: ${filename}`);
+        }, 'image/png');
+      } catch (err) {
+        console.error('Error al capturar:', err);
+        // Fallback: crear una captura simple
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = `captura_${timestamp}.txt`;
+        const content = `Captura de pantalla - ${new Date().toLocaleString()}\nEstado: ${isPlaying ? 'Reproduciendo' : 'Detenido'}\nTiempo de video: ${Math.floor(videoTime / 60)}:${(videoTime % 60).toString().padStart(2, '0')}\nLuces: ${lightsOn ? 'ON' : 'OFF'}\nDatos del Arduino: ${arduinoData ? JSON.stringify(arduinoData, null, 2) : 'No disponible'}`;
+        
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        setCaptureCount(prev => prev + 1);
+        alert(`Captura guardada como: ${filename}`);
+      }
+    }
+  };
+
+  // Generar datos simulados para el video
+  const getSimulatedData = () => {
+    if (arduinoData) {
+      return arduinoData;
+    }
+    // Datos simulados cuando Arduino no está conectado
+    return {
+      temperature: 20 + Math.sin(videoTime / 10) * 5,
+      humidity: 60 + Math.cos(videoTime / 15) * 10,
+      distance: 50 + Math.sin(videoTime / 8) * 20,
+      motor: isPlaying ? "ON" : "OFF"
+    };
+  };
+
+  const simulatedData = getSimulatedData();
 
   return (
     <div style={{ 
@@ -59,11 +158,88 @@ const InspectionPage = ({ arduinoData, error }) => {
       }}>
         {/* Overlays dentro del área de video */}
         <div style={{ position: "absolute", top: 24, left: 24, color: "#fff", fontFamily: 'Fira Mono, monospace', fontSize: "clamp(18px, 2vw, 32px)", zIndex: 2 }}>
-          16/05/2025  19:50:00<br />└ 10°
+          16/05/2025  19:50:00<br />└ {Math.floor(videoTime / 60)}:{(videoTime % 60).toString().padStart(2, '0')}
         </div>
-        {/* Simulación de video */}
-        <div style={{ width: "100%", height: "100%", background: "#444", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ color: "#fff", fontSize: "clamp(18px, 2vw, 32px)" }}>Video aquí</span>
+        {/* Estado de las luces en la esquina superior izquierda */}
+        <div style={{ 
+          position: "absolute", 
+          top: 24, 
+          left: 24, 
+          zIndex: 2,
+          marginTop: "80px"
+        }}>
+          <div style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: "8px",
+            color: "#fff", 
+            fontFamily: 'Fira Mono, monospace', 
+            fontSize: "clamp(14px, 1.5vw, 18px)",
+            background: "rgba(0,0,0,0.5)",
+            padding: "4px 8px",
+            borderRadius: "8px"
+          }}>
+            <div style={{ 
+              width: "12px", 
+              height: "12px", 
+              borderRadius: "50%", 
+              background: lightsOn ? "#FFD600" : "#666",
+              boxShadow: lightsOn ? "0 0 8px #FFD600" : "none"
+            }}></div>
+            Luces: {lightsOn ? "ON" : "OFF"}
+          </div>
+        </div>
+        {/* Video simulado con imagen animada */}
+        <div 
+          ref={videoContainerRef}
+          style={{ 
+            width: "100%", 
+            height: "100%", 
+            position: "relative", 
+            overflow: "hidden" 
+          }}
+        >
+          <div 
+            style={{ 
+              width: "100%", 
+              height: "100%", 
+              background: isPlaying 
+                ? "linear-gradient(45deg, #1a1a1a, #2a2a2a, #1a1a1a)" 
+                : "linear-gradient(45deg, #0a0a0a, #1a1a1a, #0a0a0a)",
+              backgroundSize: "400% 400%",
+              animation: isPlaying ? "gradientShift 2s ease infinite" : "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+              fontSize: "clamp(18px, 2vw, 32px)",
+              fontFamily: 'Fira Mono, monospace',
+              borderRadius: "24px",
+              filter: lightsOn ? "brightness(1.2)" : "brightness(0.8)"
+            }}
+          >
+            {isPlaying ? (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ marginBottom: "20px", fontSize: "clamp(24px, 3vw, 36px)" }}>🎥 Cámara ROV en Vivo</div>
+                <div style={{ fontSize: "clamp(14px, 1.5vw, 18px)", opacity: 0.8, marginBottom: "10px" }}>
+                  Simulación de video en tiempo real
+                </div>
+                <div style={{ fontSize: "clamp(12px, 1.2vw, 16px)", opacity: 0.6 }}>
+                  {arduinoData ? `Temp: ${simulatedData.temperature.toFixed(1)}°C | Dist: ${simulatedData.distance.toFixed(1)}cm` : `Temp: ${simulatedData.temperature.toFixed(1)}°C | Dist: ${simulatedData.distance.toFixed(1)}cm (Simulado)`}
+                </div>
+              </div>
+            ) : (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ marginBottom: "20px", fontSize: "clamp(24px, 3vw, 36px)" }}>📹 Cámara ROV</div>
+                <div style={{ fontSize: "clamp(14px, 1.5vw, 18px)", opacity: 0.8, marginBottom: "10px" }}>
+                  Presiona "Iniciar" para comenzar
+                </div>
+                <div style={{ fontSize: "clamp(12px, 1.2vw, 16px)", opacity: 0.6 }}>
+                  Sistema listo para inspección
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         {/* Gráfico simulado */}
         <div style={{ width: "100%", height: "clamp(40px, 12vh, 100px)", background: "linear-gradient(to top, #FFD60088 60%, transparent)", zIndex: 2, position: "relative", display: "flex", alignItems: "flex-end" }}>
@@ -84,13 +260,40 @@ const InspectionPage = ({ arduinoData, error }) => {
         justifyContent: "center",
         zIndex: 10
       }}>
-        <button style={buttonStyle}>Iniciar</button>
-        <button style={buttonStyle} onClick={() => navigate("/menu")}>Finalizar</button>
-        <button style={buttonStyle}>Capturar</button>
+        <button 
+          style={{...buttonStyle, background: isPlaying ? "#666" : "#FFD600"}}
+          onClick={isPlaying ? handleStop : handleStart}
+        >
+          {isPlaying ? "Detener" : "Iniciar"}
+        </button>
+        <button 
+          style={buttonStyle}
+          onClick={() => navigate("/menu")}
+        >
+          Finalizar
+        </button>
+        <button 
+          style={{...buttonStyle, background: lightsOn ? "#FFD600" : "#666"}}
+          onClick={handleLights}
+        >
+          Luces {lightsOn ? "ON" : "OFF"}
+        </button>
+        <button 
+          style={{...buttonStyle, background: "#FF6B6B"}}
+          onClick={handleCapture}
+          disabled={!isPlaying}
+        >
+          Capturar ({captureCount})
+        </button>
       </div>
       {/* Menú lateral */}
       {menuOpen && <SideMenu onClose={() => setMenuOpen(false)} arduinoData={arduinoData} error={error} />}
       <style>{`
+        @keyframes gradientShift {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
         @media (max-width: 900px) {
           .side-menu {
             width: 90vw !important;
