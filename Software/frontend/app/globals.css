@@ -1,0 +1,174 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Updated to use the new color palette with hex values converted to oklch */
+  --background: oklch(0.17 0.03 220); /* #162831 - Fondo principal (azul oscuro) */
+  --foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal (gris claro) */
+  --card: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --card-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --popover: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --popover-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --primary: oklch(0.9 0.15 85); /* #ffe42b - Botón primario (amarillo vibrante) */
+  --primary-foreground: oklch(0.17 0.03 220); /* #162831 - Texto en botón primario (oscuro para contraste) */
+  --secondary: oklch(0.4 0.02 210); /* Color secundario neutro */
+  --secondary-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto secundario */
+  --muted: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --muted-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto secundario */
+  --accent: oklch(0.7 0.15 180); /* #28bdbc - Color de acento (turquesa) */
+  --accent-foreground: oklch(0.17 0.03 220); /* #162831 - Texto en acento */
+  --destructive: oklch(0.6 0.2 15); /* #FF5252 - Error/alertas (rojo) */
+  --destructive-foreground: oklch(1 0 0); /* #FFFFFF - Texto en alertas */
+  --border: oklch(0.4 0.02 210); /* Bordes neutros */
+  --input: oklch(0.17 0.03 220); /* #162831 - Fondo de inputs */
+  --ring: oklch(0.9 0.15 85); /* #ffe42b - Anillos de foco */
+  --chart-1: oklch(0.9 0.15 85); /* #ffe42b - Gráfico 1 */
+  --chart-2: oklch(0.7 0.15 120); /* #4CAF50 - Éxito/confirmaciones (verde) */
+  --chart-3: oklch(0.6 0.2 15); /* #FF5252 - Error/alertas */
+  --chart-4: oklch(0.7 0.15 180); /* #28bdbc - Acento turquesa */
+  --chart-5: oklch(0.8 0.01 150); /* #c5cac7 - Texto secundario */
+  --radius: 0.5rem;
+  --sidebar: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --sidebar-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --sidebar-primary: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --sidebar-primary-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --sidebar-accent: oklch(0.9 0.15 85); /* #ffe42b - Botón primario */
+  --sidebar-accent-foreground: oklch(0.17 0.03 220); /* #162831 - Texto en botón primario */
+  --sidebar-border: oklch(0.4 0.02 210); /* Bordes */
+  --sidebar-ring: oklch(0.9 0.15 85); /* #ffe42b - Anillos de foco */
+
+  /* Added success color for consistent theming */
+  --success: oklch(0.7 0.15 120); /* #4CAF50 - Éxito/confirmaciones (verde) */
+  --success-foreground: oklch(1 0 0); /* #FFFFFF - Texto en éxito */
+}
+
+.dark {
+  /* Updated dark theme to match the new color palette */
+  --background: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --card: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --card-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --popover: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --popover-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --primary: oklch(0.9 0.15 85); /* #ffe42b - Botón primario */
+  --primary-foreground: oklch(0.17 0.03 220); /* #162831 - Texto en botón primario */
+  --secondary: oklch(0.4 0.02 210); /* Color secundario neutro */
+  --secondary-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto secundario */
+  --muted: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --muted-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto secundario */
+  --accent: oklch(0.7 0.15 180); /* #28bdbc - Color de acento */
+  --accent-foreground: oklch(0.17 0.03 220); /* #162831 - Texto en acento */
+  --destructive: oklch(0.6 0.2 15); /* #FF5252 - Error/alertas */
+  --destructive-foreground: oklch(1 0 0); /* #FFFFFF - Texto en alertas */
+  --border: oklch(0.4 0.02 210); /* Bordes */
+  --input: oklch(0.17 0.03 220); /* #162831 - Fondo de inputs */
+  --ring: oklch(0.9 0.15 85); /* #ffe42b - Anillos de foco */
+  --chart-1: oklch(0.9 0.15 85); /* #ffe42b - Gráfico 1 */
+  --chart-2: oklch(0.7 0.15 120); /* #4CAF50 - Éxito */
+  --chart-3: oklch(0.6 0.2 15); /* #FF5252 - Error/alertas */
+  --chart-4: oklch(0.7 0.15 180); /* #28bdbc - Acento turquesa */
+  --chart-5: oklch(0.8 0.01 150); /* #c5cac7 - Texto secundario */
+  --sidebar: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --sidebar-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --sidebar-primary: oklch(0.17 0.03 220); /* #162831 - Fondo principal */
+  --sidebar-primary-foreground: oklch(0.8 0.01 150); /* #c5cac7 - Texto principal */
+  --sidebar-accent: oklch(0.9 0.15 85); /* #ffe42b - Botón primario */
+  --sidebar-accent-foreground: oklch(0.17 0.03 220); /* #162831 - Texto en botón primario */
+  --sidebar-border: oklch(0.4 0.02 210); /* Bordes */
+  --sidebar-ring: oklch(0.9 0.15 85); /* #ffe42b - Anillos de foco */
+
+  /* Added success color for dark theme consistency */
+  --success: oklch(0.7 0.15 120); /* #4CAF50 - Éxito */
+  --success-foreground: oklch(1 0 0); /* #FFFFFF - Texto en éxito */
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Added success color to theme tokens */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Botón primario con hover personalizado */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground transition-colors duration-200;
+  }
+  
+  /* Botón secundario con hover personalizado */
+  .btn-secondary {
+    @apply bg-secondary text-secondary-foreground transition-colors duration-200;
+  }
+  
+  /* Botón outline con hover personalizado */
+  .btn-outline {
+    @apply border border-border bg-transparent transition-colors duration-200;
+  }
+  
+  /* Botón ghost con hover personalizado */
+  .btn-ghost {
+    @apply bg-transparent transition-colors duration-200;
+  }
+}
+
+/* Hover universal para todos los botones */
+button:hover,
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-outline:hover,
+.btn-ghost:hover {
+  background-color: #28bdbc !important;
+  color: #162831 !important;
+  border-color: #28bdbc !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
