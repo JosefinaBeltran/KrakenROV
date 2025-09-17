@@ -17,10 +17,9 @@ interface InspeccionData {
 
 interface SensorData {
   temperatura: number
-  presion: number
-  profundidad: number
-  orientacion: string
   distancia: number
+  humedad: number
+  motor: string
 }
 
 export default function VideoEnCursoPage() {
@@ -33,10 +32,9 @@ export default function VideoEnCursoPage() {
   const [inspeccionData, setInspeccionData] = useState<InspeccionData | null>(null)
   const [sensorData, setSensorData] = useState<SensorData>({
     temperatura: 22.5,
-    presion: 1013.25,
-    profundidad: 15.3,
-    orientacion: "Norte",
     distancia: 2.8,
+    humedad: 50,
+    motor: "OFF",
   })
   const [showSensorDropdown, setShowSensorDropdown] = useState(false)
   const [recordings, setRecordings] = useState<string[]>([])
@@ -53,21 +51,28 @@ export default function VideoEnCursoPage() {
     }
   }, [])
 
-  // Update current time every second
+  // Update current time and poll backend every second
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
-      setAngle((prev) => (prev + 1) % 360) // Simulate angle changes
-      // Update sensor data with realistic variations
-      setSensorData((prev) => ({
-        temperatura: prev.temperatura + (Math.random() - 0.5) * 0.2,
-        presion: prev.presion + (Math.random() - 0.5) * 2,
-        profundidad: prev.profundidad + (Math.random() - 0.5) * 0.5,
-        orientacion: ["Norte", "Noreste", "Este", "Sureste", "Sur", "Suroeste", "Oeste", "Noroeste"][
-          Math.floor(Math.random() * 8)
-        ],
-        distancia: prev.distancia + (Math.random() - 0.5) * 0.3,
-      }))
+      setAngle((prev) => (prev + 1) % 360)
+
+      fetch("http://localhost:5000/data")
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Bad response")
+          return res.json()
+        })
+        .then((data: { temperature: number; humidity: number; distance: number; motor: string }) => {
+          setSensorData({
+            temperatura: data.temperature,
+            humedad: data.humidity,
+            distancia: data.distance,
+            motor: data.motor,
+          })
+        })
+        .catch(() => {
+          // Keep previous values on error
+        })
     }, 1000)
 
     return () => clearInterval(timer)
@@ -217,25 +222,16 @@ export default function VideoEnCursoPage() {
                     <span className="text-sm font-medium">{sensorData.temperatura.toFixed(1)}°C</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Presión:</span>
-                    <span className="text-sm font-medium">{sensorData.presion.toFixed(2)} hPa</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Profundidad:</span>
-                    <span className="text-sm font-medium">{sensorData.profundidad.toFixed(1)} m</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Orientación:</span>
-                    <span className="text-sm font-medium flex items-center gap-2">
-                      <div className="w-4 h-4 rounded-full border-2 border-accent flex items-center justify-center">
-                        <div className="w-1 h-1 bg-accent rounded-full"></div>
-                      </div>
-                      {sensorData.orientacion}
-                    </span>
+                    <span className="text-sm text-muted-foreground">Humedad:</span>
+                    <span className="text-sm font-medium">{sensorData.humedad.toFixed(1)}%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Distancia:</span>
-                    <span className="text-sm font-medium">{sensorData.distancia.toFixed(1)} m</span>
+                    <span className="text-sm font-medium">{sensorData.distancia.toFixed(1)} cm</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Motor:</span>
+                    <span className="text-sm font-medium">{sensorData.motor}</span>
                   </div>
                 </div>
               </div>
