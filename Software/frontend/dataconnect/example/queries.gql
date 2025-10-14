@@ -1,0 +1,39 @@
+mutation CreateNewProject @auth(level: USER) {
+  project_insert(data: {
+    name: "New Project",
+    description: "A brand new project",
+    location: "Some Location",
+    createdAt_expr: "request.time"
+  })
+}
+
+query ListAllProjects @auth(level: USER) {
+  projects {
+    id
+    name
+    description
+    location
+    createdAt
+  }
+}
+
+mutation UpdateInspectionStatus($id: UUID!, $status: String!) @auth(level: USER) {
+  inspection_update(
+    id: $id,
+    data: {
+      status: $status
+    }
+  )
+}
+
+query GetMediaAssetsByInspectionId($inspectionId: UUID!) @auth(level: USER) {
+  mediaAssets(where: {inspectionId: {eq: $inspectionId}}) {
+    id
+    url
+    thumbnailUrl
+    type
+    description
+    captureTimestamp
+    tags
+  }
+}

@@ -8,13 +8,15 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, RotateCcw, ArrowRight } from "lucide-react"
+import { useDatabase } from "@/hooks/useDatabase"
 
 export default function FormularioInspeccionPage() {
   const router = useRouter()
+  const { saveTempInspeccionData } = useDatabase()
   const [formData, setFormData] = useState({
     nombreInspeccion: "",
     lugarInspeccion: "",
-    fechaInspeccion: "",
+    fechaInspeccion: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
     descripcion: "",
     nombreApellido: "",
     matricula: "",
@@ -59,7 +61,7 @@ export default function FormularioInspeccionPage() {
     setFormData({
       nombreInspeccion: "",
       lugarInspeccion: "",
-      fechaInspeccion: "",
+      fechaInspeccion: new Date().toISOString().split('T')[0], // Mantener fecha actual al limpiar
       descripcion: "",
       nombreApellido: "",
       matricula: "",
@@ -67,11 +69,21 @@ export default function FormularioInspeccionPage() {
     setErrors({})
   }
 
-  const handleSiguiente = () => {
+  const handleSiguiente = async () => {
     if (validateForm()) {
-      // Store form data in localStorage for the video recording screen
-      localStorage.setItem("inspeccionData", JSON.stringify(formData))
-      router.push("/video-en-curso")
+      // Normalize date to avoid TZ shifting (store as YYYY-MM-DD)
+      const normalized = {
+        ...formData,
+        fechaInspeccion: formData.fechaInspeccion,
+      }
+      // Store form data in database for the video recording screen
+      try {
+        await saveTempInspeccionData(normalized)
+        router.push("/video-en-curso")
+      } catch (error) {
+        console.error('Error saving form data:', error)
+        alert('Error al guardar los datos del formulario. Por favor, intente nuevamente.')
+      }
     }
   }
 

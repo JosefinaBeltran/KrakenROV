@@ -1,0 +1,7 @@
+# Google OAuth2 Configuration
+GOOGLE_CLIENT_ID=791215838075-j0lkah2jij1obmm7tvm4h82rob4qmdr9.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=TU_CLIENT_SECRET_AQUI
+GOOGLE_REDIRECT_URI=http://localhost:3000/oauth2callback
+
+# YouTube API
+YOUTUBE_API_KEY=AIzaSyAekhtAlOpbyy-fq7VxwT0XcEtfaLLuDb8

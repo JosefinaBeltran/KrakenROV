@@ -1,0 +1,56 @@
+type User @table {
+  username: String!
+  passwordHash: String!
+  email: String!
+  role: String!
+  firstName: String
+  lastName: String
+  organization: String
+}
+
+type Project @table {
+  name: String!
+  createdAt: Timestamp!
+  description: String
+  location: String
+}
+
+type Inspection @table {
+  name: String!
+  date: Date!
+  status: String!
+  rovType: String
+  depth: Float
+  weatherConditions: String
+  notes: String
+  project: Project
+  user: User
+}
+
+type MediaAsset @table {
+  type: String!
+  url: String!
+  captureTimestamp: Timestamp!
+  thumbnailUrl: String
+  description: String
+  tags: [String]
+  inspection: Inspection
+}
+
+type InspectionForm @table {
+  templateName: String!
+  formData: String! # Storing JSON as a string
+  submissionTimestamp: Timestamp!
+  reviewerNotes: String
+  inspection: Inspection
+}
+
+type Report @table {
+  title: String!
+  generatedAt: Timestamp!
+  fileUrl: String!
+  summary: String
+  status: String
+  inspection: Inspection
+  user: User
+}

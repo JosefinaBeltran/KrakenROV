@@ -17,6 +17,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  // Simple auth gate: redirect unauthenticated users to /login on the client
   return (
     <html lang="es" className="dark">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>

@@ -1,0 +1,30 @@
+mutation SeedDatabase @auth(level: USER) {
+  project_insertMany(data: [
+    {
+      name: "Project Alpha",
+      description: "Initial project for testing",
+      location: "Test Location A",
+      createdAt: "2024-01-01T00:00:00Z"
+    },
+    {
+      name: "Project Beta",
+      description: "Secondary project for evaluation",
+      location: "Test Location B",
+      createdAt: "2024-02-15T00:00:00Z"
+    }
+  ])
+  user_insertMany(data: [
+    {
+      username: "testuser1",
+      email: "test1@example.com",
+      passwordHash: "hash1",
+      role: "admin"
+    },
+    {
+      username: "testuser2",
+      email: "test2@example.com",
+      passwordHash: "hash2",
+      role: "user"
+    }
+  ])
+}
