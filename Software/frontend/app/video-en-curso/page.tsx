@@ -69,12 +69,25 @@ export default function VideoEnCursoPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
+  // Estado para el gráfico de presión (perfil de inmersión)
+  const [pressureHistory, setPressureHistory] = useState<number[]>([])
+  const [chartUpdateTrigger, setChartUpdateTrigger] = useState(0)
+  const [inspectionStartTime, setInspectionStartTime] = useState<number | null>(null)
+  const [realTimeHistory, setRealTimeHistory] = useState<{time: number, depth: number}[]>([])
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
   const videoContainerRef = useRef<HTMLDivElement>(null)
+
+  // Initialize inspection start time
+  useEffect(() => {
+    if (!inspectionStartTime) {
+      setInspectionStartTime(Date.now())
+    }
+  }, [])
 
   // Load inspection data from database
   useEffect(() => {
@@ -215,6 +228,20 @@ export default function VideoEnCursoPage() {
             obstacles: data.obstacles !== undefined ? data.obstacles : prevData.obstacles,
             pressure: data.pressure || prevData.pressure,
           }))
+          
+          // Actualizar historial de presión para el gráfico
+          if (data.pressure !== undefined) {
+            setPressureHistory(prev => {
+              const newHistory = [...prev, data.pressure]
+              // Mantener solo los últimos 50 valores (50 segundos)
+              return newHistory.slice(-50)
+            })
+          }
+          
+          // Forzar actualización del gráfico simulado cada segundo
+          if (pressureHistory.length === 0) {
+            setChartUpdateTrigger(prev => prev + 1)
+          }
         })
         .catch(() => {
           // Keep previous values on error
@@ -427,7 +454,103 @@ export default function VideoEnCursoPage() {
     return data
   }
 
+  // Convert pressure (Pa) to depth (meters) using hydrostatic formula
+  const pressureToDepth = (pressurePa: number) => {
+    const atmosphericPressure = 101325 // Pa (1 atm)
+    const waterDensity = 1025 // kg/m³ (seawater)
+    const gravity = 9.81 // m/s²
+    
+    // P = P₀ + ρgh
+    // h = (P - P₀) / (ρg)
+    const depth = (pressurePa - atmosphericPressure) / (waterDensity * gravity)
+    return Math.max(0, depth) // No negative depths
+  }
+
+  // Generate realistic dive profile data with real time progression
+  const generateRealisticDiveProfile = () => {
+    if (!inspectionStartTime) return []
+    
+    const data = []
+    const elapsed = getElapsedTime()
+    
+    for (let i = 0; i < 50; i++) {
+      // Calculate time for this data point (going back in time)
+      const pointTime = Math.max(0, elapsed - (49 - i))
+      
+      let depth = 0
+      
+      // Create a realistic dive profile based on elapsed time
+      if (pointTime < 20) {
+        // Descent phase (0-20 seconds): 0m to 45m
+        const descentProgress = pointTime / 20
+        depth = 45 * descentProgress + Math.sin(pointTime * 0.1) * 5
+      } else if (pointTime < 40) {
+        // Deep exploration (20-40 seconds): 35-50m
+        depth = 42 + Math.sin(pointTime * 0.15) * 8 + Math.sin(pointTime * 0.05) * 5
+      } else if (pointTime < 60) {
+        // Mid-depth exploration (40-60 seconds): 15-35m
+        depth = 25 + Math.sin(pointTime * 0.2) * 10 + Math.sin(pointTime * 0.1) * 5
+      } else if (pointTime < 80) {
+        // Deep dive again (60-80 seconds): 25-45m
+        depth = 35 + Math.sin(pointTime * 0.12) * 10 + Math.sin(pointTime * 0.08) * 5
+      } else if (pointTime < 100) {
+        // Shallow exploration (80-100 seconds): 5-25m
+        depth = 15 + Math.sin(pointTime * 0.25) * 10 + Math.sin(pointTime * 0.15) * 3
+      } else {
+        // Ascent phase (100+ seconds): 15m to 0m
+        const ascentProgress = Math.min(1, (pointTime - 100) / 20)
+        depth = 15 * (1 - ascentProgress) + Math.sin(pointTime * 0.3) * 2
+      }
+      
+      // Add realistic noise
+      const noise = (Math.random() - 0.5) * 4 + Math.sin(pointTime * 0.5) * 1
+      depth = Math.max(0, depth + noise)
+      
+      data.push(depth)
+    }
+    
+    return data
+  }
+
+  // Generate depth chart data for immersion profile
+  const generateDepthChartData = () => {
+    if (pressureHistory.length === 0) {
+      // Si no hay datos del sensor, generar perfil de inmersión realista
+      // Usar chartUpdateTrigger para forzar recálculo
+      return generateRealisticDiveProfile()
+    }
+    // Convert pressure history to depth
+    return pressureHistory.map(pressure => pressureToDepth(pressure))
+  }
+
+  // Calculate elapsed time since inspection started
+  const getElapsedTime = () => {
+    if (!inspectionStartTime) return 0
+    return Math.floor((Date.now() - inspectionStartTime) / 1000) // seconds
+  }
+
+  // Generate time labels for X-axis based on real elapsed time
+  const getTimeLabels = () => {
+    const elapsed = getElapsedTime()
+    const maxTime = Math.max(45, elapsed) // Show at least 45 seconds or current elapsed time
+    
+    return {
+      start: Math.max(0, elapsed - 45), // Start from 45 seconds ago or 0
+      quarter: Math.max(0, elapsed - 34), // 3/4 of the way back
+      half: Math.max(0, elapsed - 23), // Half way back
+      threeQuarter: Math.max(0, elapsed - 12), // 1/4 of the way back
+      end: elapsed // Current time
+    }
+  }
+
   const chartData = generateChartData()
+  const depthChartData = generateDepthChartData()
+  const timeLabels = getTimeLabels()
+  
+  // Forzar re-render del gráfico cuando cambie el trigger
+  useEffect(() => {
+    // Este efecto se ejecuta cuando chartUpdateTrigger cambia
+  }, [chartUpdateTrigger])
 
   const handleFullscreen = async () => {
     const container = videoContainerRef.current
@@ -653,8 +776,93 @@ export default function VideoEnCursoPage() {
               </div>
             </div>
 
-            {/* Bottom left - Rotation indicators */}
-            <div className="absolute bottom-4 left-4">
+            {/* Bottom left - Pressure chart and rotation indicators */}
+            <div className="absolute bottom-4 left-4 flex flex-col gap-2">
+              {/* Gráfico de Perfil de Inmersión (Profundidad) */}
+              <div className="bg-black/80 text-white p-3 rounded border border-blue-500/30">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-semibold text-blue-300">Perfil de Inmersión</div>
+                  {pressureHistory.length === 0 && (
+                    <div className="text-xs text-yellow-400">SIM</div>
+                  )}
+                </div>
+                <svg width="120" height="60" className="text-blue-400">
+                  {/* Grid lines for depth reference */}
+                  <defs>
+                    <pattern id="depthGrid" width="24" height="12" patternUnits="userSpaceOnUse">
+                      <path d="M 0 12 L 24 12" stroke="rgba(59, 130, 246, 0.2)" strokeWidth="0.5"/>
+                    </pattern>
+                    {/* Clipping path to prevent line from overlapping with axis labels */}
+                    <clipPath id="chartClip">
+                      <rect x="18" y="0" width="102" height="52"/>
+                    </clipPath>
+                  </defs>
+                  <rect width="120" height="60" fill="url(#depthGrid)" opacity="0.3"/>
+                  
+                  {/* Time reference lines - clipped to avoid X-axis overlap */}
+                  <line x1="18" y1="0" x2="18" y2="52" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5"/>
+                  <line x1="44" y1="0" x2="44" y2="52" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5"/>
+                  <line x1="70" y1="0" x2="70" y2="52" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5"/>
+                  <line x1="96" y1="0" x2="96" y2="52" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5"/>
+                  <line x1="120" y1="0" x2="120" y2="52" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5"/>
+                  
+                  {/* Chart area with clipping */}
+                  <g clipPath="url(#chartClip)">
+                    {/* Depth profile line */}
+                    <polyline
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      points={depthChartData.map((depth, index) => {
+                        // Normalizar profundidad: 0-50m -> 0-52 píxeles (invertido para que 0m esté arriba)
+                        // Ajustar posición X para que empiece después de las etiquetas y use todo el ancho
+                        const x = 18 + (index * 2.04) // Empezar en x=18, espaciado de 2.04 para llegar a 120
+                        const normalizedDepth = Math.max(0, Math.min(52, (depth / 50) * 52))
+                        return `${x},${normalizedDepth}`
+                      }).join(" ")}
+                    />
+                    
+                    {/* Current depth indicator */}
+                    <circle
+                      cx={depthChartData.length > 0 ? 18 + ((depthChartData.length - 1) * 2.04) : 18}
+                      cy={depthChartData.length > 0 ? Math.max(0, Math.min(52, (depthChartData[depthChartData.length - 1] / 50) * 52)) : 0}
+                      r="3"
+                      fill="currentColor"
+                      className="text-yellow-400"
+                    />
+                  </g>
+                  
+                  {/* Depth scale markers - positioned to match the chart scale */}
+                  <text x="2" y="8" fontSize="7" fill="rgba(255,255,255,0.8)">0m</text>
+                  <text x="2" y="22" fontSize="7" fill="rgba(255,255,255,0.8)">25m</text>
+                  <text x="2" y="36" fontSize="7" fill="rgba(255,255,255,0.8)">40m</text>
+                  <text x="2" y="50" fontSize="7" fill="rgba(255,255,255,0.8)">50m</text>
+                  
+                  {/* Time scale markers on X-axis - Real elapsed time */}
+                  <text x="18" y="58" fontSize="6" fill="rgba(255,255,255,0.7)" textAnchor="start">{timeLabels.start}s</text>
+                  <text x="44" y="58" fontSize="6" fill="rgba(255,255,255,0.7)" textAnchor="middle">{timeLabels.quarter}s</text>
+                  <text x="70" y="58" fontSize="6" fill="rgba(255,255,255,0.7)" textAnchor="middle">{timeLabels.half}s</text>
+                  <text x="96" y="58" fontSize="6" fill="rgba(255,255,255,0.7)" textAnchor="middle">{timeLabels.threeQuarter}s</text>
+                  <text x="120" y="58" fontSize="6" fill="rgba(255,255,255,0.7)" textAnchor="end">{timeLabels.end}s</text>
+                </svg>
+                <div className="text-xs mt-1 text-center">
+                  <div className="flex justify-between">
+                    <span className="text-blue-300">
+                      Profundidad: {pressureHistory.length > 0 ? 
+                        pressureToDepth(sensorData.pressure || 101325).toFixed(1) + 'm' : 
+                        depthChartData[depthChartData.length - 1]?.toFixed(1) + 'm (SIM)'
+                      }
+                    </span>
+                    <span className="text-green-300">
+                      Tiempo: {getElapsedTime()}s
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Rotation indicators */}
               <div className="bg-black/70 text-white px-3 py-2 rounded text-sm">
                 <div className="text-xs text-muted-foreground mb-1">Rotaciones (rad/s)</div>
                 <div className="flex gap-3 text-xs">
@@ -665,8 +873,9 @@ export default function VideoEnCursoPage() {
               </div>
             </div>
 
-            {/* Bottom right - Real-time chart and fullscreen button */}
+            {/* Bottom right - Temperature chart and fullscreen button */}
             <div className="absolute bottom-4 right-4 flex items-end gap-2">
+              {/* Gráfico de Temperatura */}
               <div className="bg-black/70 text-white p-3 rounded">
                 <div className="text-xs mb-2">Temperatura en tiempo real</div>
                 <svg width="120" height="60" className="text-primary">
