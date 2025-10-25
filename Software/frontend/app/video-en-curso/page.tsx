@@ -231,11 +231,15 @@ export default function VideoEnCursoPage() {
           
           // Actualizar historial de altitud para el gráfico
           if (data.altitude !== undefined) {
+            console.log('Datos de altitud recibidos:', data.altitude, 'Tipo:', typeof data.altitude)
             setAltitudeHistory(prev => {
               const newHistory = [...prev, data.altitude]
+              console.log('Historial de altitud actualizado:', newHistory.slice(-5)) // Mostrar últimos 5 valores
               // Mantener solo los últimos 50 valores (50 segundos)
               return newHistory.slice(-50)
             })
+          } else {
+            console.log('No se recibieron datos de altitud. Datos completos:', data)
           }
           
           // Forzar actualización del gráfico simulado cada segundo si no hay datos reales
@@ -514,13 +518,23 @@ export default function VideoEnCursoPage() {
 
   // Generate depth chart data for immersion profile
   const generateDepthChartData = () => {
+    console.log('Generando datos del gráfico. Historial de altitud:', altitudeHistory.length, 'valores')
     if (altitudeHistory.length === 0) {
+      console.log('No hay datos de altitud, usando perfil simulado')
       // Si no hay datos del sensor, generar perfil de inmersión realista
       // Usar chartUpdateTrigger para forzar recálculo
       return generateRealisticDiveProfile()
     }
-    // Usar datos de altitud directamente (convertir a profundidad negativa)
-    return altitudeHistory.map(altitude => Math.max(0, -altitude))
+    // Usar datos de altitud directamente (convertir a profundidad)
+    // Si altitud es positiva (sobre el nivel del mar), la profundidad es 0
+    // Si altitud es negativa (bajo el nivel del mar), la profundidad es el valor absoluto
+    const depthData = altitudeHistory.map(altitude => {
+      const depth = altitude < 0 ? Math.abs(altitude) : 0
+      console.log(`Altitud: ${altitude}m -> Profundidad: ${depth}m`)
+      return depth
+    })
+    console.log('Datos de profundidad generados:', depthData.slice(-5)) // Mostrar últimos 5 valores
+    return depthData
   }
 
   // Calculate elapsed time since inspection started
@@ -851,7 +865,7 @@ export default function VideoEnCursoPage() {
                   <div className="flex justify-between">
                     <span className="text-blue-300">
                       Profundidad: {altitudeHistory.length > 0 ? 
-                        Math.max(0, -(sensorData.altitude || 0)).toFixed(1) + 'm' : 
+                        (sensorData.altitude && sensorData.altitude < 0 ? Math.abs(sensorData.altitude).toFixed(1) : '0.0') + 'm' : 
                         depthChartData[depthChartData.length - 1]?.toFixed(1) + 'm (SIM)'
                       }
                     </span>
