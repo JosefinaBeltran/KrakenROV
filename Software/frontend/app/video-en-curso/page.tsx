@@ -450,12 +450,15 @@ export default function VideoEnCursoPage() {
         
         // Capturar gráficos antes de guardar
         console.log('Intentando capturar gráficos...')
+        console.log('Datos disponibles - Temperatura:', temperatureHistory.length, 'Altitud:', altitudeHistory.length)
+        
         if (chartCaptureRef.current) {
           console.log('Ref encontrado, capturando gráficos')
           chartCaptureRef.current.captureCharts()
           
           // Esperar un poco para que se capturen los gráficos
-          await new Promise(resolve => setTimeout(resolve, 500))
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          console.log('Gráficos capturados:', sensorCharts)
         } else {
           console.log('No se encontró la referencia del componente ChartCapture')
         }

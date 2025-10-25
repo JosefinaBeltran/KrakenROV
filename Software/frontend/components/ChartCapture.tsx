@@ -33,7 +33,10 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, width, height)
 
-    if (data.length === 0) return
+    if (data.length === 0) {
+      console.log('No hay datos de temperatura para generar gráfico')
+      return
+    }
 
     // Calcular escalas
     const maxTemp = Math.max(...data)
@@ -125,7 +128,10 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, width, height)
 
-    if (data.length === 0) return
+    if (data.length === 0) {
+      console.log('No hay datos de altitud para generar gráfico')
+      return
+    }
 
     // Convertir altitud a profundidad
     const depthData = data.map(altitude => altitude < 0 ? Math.abs(altitude) : 0)
@@ -232,6 +238,19 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
       return
     }
 
+    // Generar gráficos antes de capturar
+    if (temperatureData.length > 0) {
+      generateTemperatureChart(tempCanvasRef.current, temperatureData)
+    } else {
+      generateEmptyChart(tempCanvasRef.current, 'Sin datos de temperatura')
+    }
+
+    if (altitudeData.length > 0) {
+      generateDepthChart(depthCanvasRef.current, altitudeData)
+    } else {
+      generateEmptyChart(depthCanvasRef.current, 'Sin datos de altitud')
+    }
+
     const temperatureImage = tempCanvasRef.current.toDataURL('image/png')
     const depthImage = depthCanvasRef.current.toDataURL('image/png')
 
@@ -246,6 +265,26 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
     })
 
     setIsCaptured(true)
+  }
+
+  // Función para generar gráfico vacío
+  const generateEmptyChart = (canvas: HTMLCanvasElement, message: string) => {
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const width = canvas.width
+    const height = canvas.height
+
+    // Limpiar canvas
+    ctx.clearRect(0, 0, width, height)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+
+    // Dibujar mensaje
+    ctx.fillStyle = '#666666'
+    ctx.font = 'bold 16px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText(message, width / 2, height / 2)
   }
 
   // Exponer la función captureCharts a través del ref
