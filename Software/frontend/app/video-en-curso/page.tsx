@@ -74,6 +74,21 @@ export default function VideoEnCursoPage() {
   const [chartUpdateTrigger, setChartUpdateTrigger] = useState(0)
   const [inspectionStartTime, setInspectionStartTime] = useState<number | null>(null)
   const [realTimeHistory, setRealTimeHistory] = useState<{time: number, depth: number}[]>([])
+  
+  // Estado para guardar datos de sensores durante la grabación
+  const [sensorDataHistory, setSensorDataHistory] = useState<{
+    temperature: { timestamp: number, value: number }[]
+    altitude: { timestamp: number, value: number }[]
+    pressure: { timestamp: number, value: number }[]
+    humidity: { timestamp: number, value: number }[]
+    distance: { timestamp: number, value: number }[]
+  }>({
+    temperature: [],
+    altitude: [],
+    pressure: [],
+    humidity: [],
+    distance: []
+  })
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -88,6 +103,19 @@ export default function VideoEnCursoPage() {
       setInspectionStartTime(Date.now())
     }
   }, [])
+
+  // Limpiar datos de sensores cuando se inicia una nueva inspección
+  useEffect(() => {
+    if (inspeccionData && inspeccionData.id) {
+      setSensorDataHistory({
+        temperature: [],
+        altitude: [],
+        pressure: [],
+        humidity: [],
+        distance: []
+      })
+    }
+  }, [inspeccionData?.id])
 
   // Load inspection data from database
   useEffect(() => {
@@ -231,15 +259,46 @@ export default function VideoEnCursoPage() {
           
           // Actualizar historial de altitud para el gráfico
           if (data.altitude !== undefined) {
-            console.log('Datos de altitud recibidos:', data.altitude, 'Tipo:', typeof data.altitude)
             setAltitudeHistory(prev => {
               const newHistory = [...prev, data.altitude]
-              console.log('Historial de altitud actualizado:', newHistory.slice(-5)) // Mostrar últimos 5 valores
               // Mantener solo los últimos 50 valores (50 segundos)
               return newHistory.slice(-50)
             })
-          } else {
-            console.log('No se recibieron datos de altitud. Datos completos:', data)
+          }
+          
+          // Guardar datos de sensores durante la grabación
+          if (isRecording) {
+            const timestamp = Date.now()
+            setSensorDataHistory(prev => {
+              const newHistory = { ...prev }
+              
+              // Guardar temperatura
+              if (data.temperature !== undefined) {
+                newHistory.temperature.push({ timestamp, value: data.temperature })
+              }
+              
+              // Guardar altitud
+              if (data.altitude !== undefined) {
+                newHistory.altitude.push({ timestamp, value: data.altitude })
+              }
+              
+              // Guardar presión
+              if (data.pressure !== undefined) {
+                newHistory.pressure.push({ timestamp, value: data.pressure })
+              }
+              
+              // Guardar humedad
+              if (data.humidity !== undefined) {
+                newHistory.humidity.push({ timestamp, value: data.humidity })
+              }
+              
+              // Guardar distancia
+              if (data.distance !== undefined) {
+                newHistory.distance.push({ timestamp, value: data.distance })
+              }
+              
+              return newHistory
+            })
           }
           
           // Forzar actualización del gráfico simulado cada segundo si no hay datos reales
@@ -423,6 +482,7 @@ export default function VideoEnCursoPage() {
           capturedFrames,
           recordings, // base64 webm strings
           recordingTime,
+          sensorData: sensorDataHistory, // Incluir datos de sensores
         }
 
         console.log('Saving inspeccion:', inspectionWithFrames)
@@ -518,9 +578,7 @@ export default function VideoEnCursoPage() {
 
   // Generate depth chart data for immersion profile
   const generateDepthChartData = () => {
-    console.log('Generando datos del gráfico. Historial de altitud:', altitudeHistory.length, 'valores')
     if (altitudeHistory.length === 0) {
-      console.log('No hay datos de altitud, usando perfil simulado')
       // Si no hay datos del sensor, generar perfil de inmersión realista
       // Usar chartUpdateTrigger para forzar recálculo
       return generateRealisticDiveProfile()
@@ -530,10 +588,8 @@ export default function VideoEnCursoPage() {
     // Si altitud es negativa (bajo el nivel del mar), la profundidad es el valor absoluto
     const depthData = altitudeHistory.map(altitude => {
       const depth = altitude < 0 ? Math.abs(altitude) : 0
-      console.log(`Altitud: ${altitude}m -> Profundidad: ${depth}m`)
       return depth
     })
-    console.log('Datos de profundidad generados:', depthData.slice(-5)) // Mostrar últimos 5 valores
     return depthData
   }
 
@@ -873,6 +929,11 @@ export default function VideoEnCursoPage() {
                       Tiempo: {getElapsedTime()}s
                     </span>
                   </div>
+                  {isRecording && (
+                    <div className="text-xs text-yellow-400 mt-1">
+                      📊 Guardando datos de sensores ({sensorDataHistory.altitude.length} puntos)
+                    </div>
+                  )}
                 </div>
               </div>
               

@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Calendar, MapPin, FileCheck, Upload, ImageIcon, Printer as Print, Download } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
+import SensorCharts from "@/components/SensorCharts"
 
 interface Inspeccion {
   id: string
@@ -23,6 +24,13 @@ interface Inspeccion {
   createdAt: string
   observaciones?: string
   reportImages?: string[]
+  sensorData?: {
+    temperature: { timestamp: number, value: number }[]
+    altitude: { timestamp: number, value: number }[]
+    pressure?: { timestamp: number, value: number }[]
+    humidity?: { timestamp: number, value: number }[]
+    distance?: { timestamp: number, value: number }[]
+  }
 }
 
 export default function InformeInspeccionPage() {
@@ -460,6 +468,16 @@ export default function InformeInspeccionPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Sensor Data Charts */}
+            {inspeccion.sensorData && (
+              <div className="border-t border-border pt-6">
+                <SensorCharts 
+                  sensorData={inspeccion.sensorData} 
+                  inspectionStartTime={new Date(inspeccion.createdAt).getTime()}
+                />
               </div>
             )}
 
