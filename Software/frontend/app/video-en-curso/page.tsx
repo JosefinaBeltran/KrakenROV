@@ -83,6 +83,13 @@ export default function VideoEnCursoPage() {
     depth: string
   } | null>(null)
 
+  // Log cuando se actualicen los gráficos
+  useEffect(() => {
+    if (sensorCharts) {
+      console.log('Gráficos de sensores actualizados:', sensorCharts)
+    }
+  }, [sensorCharts])
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -442,8 +449,15 @@ export default function VideoEnCursoPage() {
         console.log('Attempting to save inspeccion to database...')
         
         // Capturar gráficos antes de guardar
+        console.log('Intentando capturar gráficos...')
         if (chartCaptureRef.current) {
+          console.log('Ref encontrado, capturando gráficos')
           chartCaptureRef.current.captureCharts()
+          
+          // Esperar un poco para que se capturen los gráficos
+          await new Promise(resolve => setTimeout(resolve, 500))
+        } else {
+          console.log('No se encontró la referencia del componente ChartCapture')
         }
         
         const inspectionWithFrames = {

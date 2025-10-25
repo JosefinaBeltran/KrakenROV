@@ -221,10 +221,24 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
 
   // Función para capturar los gráficos
   const captureCharts = () => {
-    if (!tempCanvasRef.current || !depthCanvasRef.current) return
+    console.log('captureCharts llamada')
+    console.log('tempCanvasRef.current:', tempCanvasRef.current)
+    console.log('depthCanvasRef.current:', depthCanvasRef.current)
+    console.log('temperatureData length:', temperatureData.length)
+    console.log('altitudeData length:', altitudeData.length)
+    
+    if (!tempCanvasRef.current || !depthCanvasRef.current) {
+      console.log('Canvas no encontrado, no se pueden capturar los gráficos')
+      return
+    }
 
     const temperatureImage = tempCanvasRef.current.toDataURL('image/png')
     const depthImage = depthCanvasRef.current.toDataURL('image/png')
+
+    console.log('Gráficos capturados:', {
+      temperatureLength: temperatureImage.length,
+      depthLength: depthImage.length
+    })
 
     onChartCaptured({
       temperature: temperatureImage,
