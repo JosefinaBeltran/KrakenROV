@@ -36,13 +36,10 @@ export interface InspeccionData {
   createdAt: string
   updatedAt: string
   syncedToCloud: boolean
-  // Datos de sensores para gráficos
-  sensorData?: {
-    temperature: { timestamp: number, value: number }[]
-    altitude: { timestamp: number, value: number }[]
-    pressure?: { timestamp: number, value: number }[]
-    humidity?: { timestamp: number, value: number }[]
-    distance?: { timestamp: number, value: number }[]
+  // Gráficos de sensores capturados
+  sensorCharts?: {
+    temperature: string // base64 image
+    depth: string // base64 image
   }
 }
 

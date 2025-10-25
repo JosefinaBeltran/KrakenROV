@@ -24,12 +24,9 @@ interface Inspeccion {
   createdAt: string
   observaciones?: string
   reportImages?: string[]
-  sensorData?: {
-    temperature: { timestamp: number, value: number }[]
-    altitude: { timestamp: number, value: number }[]
-    pressure?: { timestamp: number, value: number }[]
-    humidity?: { timestamp: number, value: number }[]
-    distance?: { timestamp: number, value: number }[]
+  sensorCharts?: {
+    temperature: string
+    depth: string
   }
 }
 
@@ -472,11 +469,10 @@ export default function InformeInspeccionPage() {
             )}
 
             {/* Sensor Data Charts */}
-            {inspeccion.sensorData && (
+            {inspeccion.sensorCharts && (
               <div className="border-t border-border pt-6">
                 <SensorCharts 
-                  sensorData={inspeccion.sensorData} 
-                  inspectionStartTime={new Date(inspeccion.createdAt).getTime()}
+                  sensorCharts={inspeccion.sensorCharts}
                 />
               </div>
             )}

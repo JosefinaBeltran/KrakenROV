@@ -8,6 +8,7 @@ import { Play, Square, Camera, Trash2, CheckCircle, Circle, ChevronDown } from "
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { useDatabase } from "@/hooks/useDatabase"
+import ChartCapture from "@/components/ChartCapture"
 
 interface InspeccionData {
   nombreInspeccion: string
@@ -75,20 +76,12 @@ export default function VideoEnCursoPage() {
   const [inspectionStartTime, setInspectionStartTime] = useState<number | null>(null)
   const [realTimeHistory, setRealTimeHistory] = useState<{time: number, depth: number}[]>([])
   
-  // Estado para guardar datos de sensores durante la grabación
-  const [sensorDataHistory, setSensorDataHistory] = useState<{
-    temperature: { timestamp: number, value: number }[]
-    altitude: { timestamp: number, value: number }[]
-    pressure: { timestamp: number, value: number }[]
-    humidity: { timestamp: number, value: number }[]
-    distance: { timestamp: number, value: number }[]
-  }>({
-    temperature: [],
-    altitude: [],
-    pressure: [],
-    humidity: [],
-    distance: []
-  })
+  // Estado para datos de sensores en tiempo real (para gráficos)
+  const [temperatureHistory, setTemperatureHistory] = useState<number[]>([])
+  const [sensorCharts, setSensorCharts] = useState<{
+    temperature: string
+    depth: string
+  } | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -96,6 +89,7 @@ export default function VideoEnCursoPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Blob[]>([])
   const videoContainerRef = useRef<HTMLDivElement>(null)
+  const chartCaptureRef = useRef<{ captureCharts: () => void }>(null)
 
   // Initialize inspection start time
   useEffect(() => {
@@ -107,13 +101,8 @@ export default function VideoEnCursoPage() {
   // Limpiar datos de sensores cuando se inicia una nueva inspección
   useEffect(() => {
     if (inspeccionData && inspeccionData.id) {
-      setSensorDataHistory({
-        temperature: [],
-        altitude: [],
-        pressure: [],
-        humidity: [],
-        distance: []
-      })
+      setTemperatureHistory([])
+      setSensorCharts(null)
     }
   }, [inspeccionData?.id])
 
@@ -266,38 +255,12 @@ export default function VideoEnCursoPage() {
             })
           }
           
-          // Guardar datos de sensores durante la grabación
-          if (isRecording) {
-            const timestamp = Date.now()
-            setSensorDataHistory(prev => {
-              const newHistory = { ...prev }
-              
-              // Guardar temperatura
-              if (data.temperature !== undefined) {
-                newHistory.temperature.push({ timestamp, value: data.temperature })
-              }
-              
-              // Guardar altitud
-              if (data.altitude !== undefined) {
-                newHistory.altitude.push({ timestamp, value: data.altitude })
-              }
-              
-              // Guardar presión
-              if (data.pressure !== undefined) {
-                newHistory.pressure.push({ timestamp, value: data.pressure })
-              }
-              
-              // Guardar humedad
-              if (data.humidity !== undefined) {
-                newHistory.humidity.push({ timestamp, value: data.humidity })
-              }
-              
-              // Guardar distancia
-              if (data.distance !== undefined) {
-                newHistory.distance.push({ timestamp, value: data.distance })
-              }
-              
-              return newHistory
+          // Actualizar historial de temperatura para el gráfico
+          if (data.temperature !== undefined) {
+            setTemperatureHistory(prev => {
+              const newHistory = [...prev, data.temperature]
+              // Mantener solo los últimos 50 valores (50 segundos)
+              return newHistory.slice(-50)
             })
           }
           
@@ -477,12 +440,18 @@ export default function VideoEnCursoPage() {
     if (inspeccionData) {
       try {
         console.log('Attempting to save inspeccion to database...')
+        
+        // Capturar gráficos antes de guardar
+        if (chartCaptureRef.current) {
+          chartCaptureRef.current.captureCharts()
+        }
+        
         const inspectionWithFrames = {
           ...inspeccionData,
           capturedFrames,
           recordings, // base64 webm strings
           recordingTime,
-          sensorData: sensorDataHistory, // Incluir datos de sensores
+          sensorCharts, // Incluir gráficos de sensores
         }
 
         console.log('Saving inspeccion:', inspectionWithFrames)
@@ -931,7 +900,7 @@ export default function VideoEnCursoPage() {
                   </div>
                   {isRecording && (
                     <div className="text-xs text-yellow-400 mt-1">
-                      📊 Guardando datos de sensores ({sensorDataHistory.altitude.length} puntos)
+                      📊 Generando gráficos en tiempo real
                     </div>
                   )}
                 </div>
@@ -1099,6 +1068,15 @@ export default function VideoEnCursoPage() {
 
         {/* Hidden canvas for frame capture */}
         <canvas ref={canvasRef} className="hidden" />
+        
+        {/* Chart capture component */}
+        <ChartCapture
+          ref={chartCaptureRef}
+          temperatureData={temperatureHistory}
+          altitudeData={altitudeHistory}
+          inspectionStartTime={inspectionStartTime || Date.now()}
+          onChartCaptured={setSensorCharts}
+        />
       </div>
     </div>
   )
