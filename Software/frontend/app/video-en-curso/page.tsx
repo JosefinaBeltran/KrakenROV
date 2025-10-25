@@ -69,8 +69,8 @@ export default function VideoEnCursoPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  // Estado para el gráfico de presión (perfil de inmersión)
-  const [pressureHistory, setPressureHistory] = useState<number[]>([])
+  // Estado para el gráfico de altitud (perfil de inmersión)
+  const [altitudeHistory, setAltitudeHistory] = useState<number[]>([])
   const [chartUpdateTrigger, setChartUpdateTrigger] = useState(0)
   const [inspectionStartTime, setInspectionStartTime] = useState<number | null>(null)
   const [realTimeHistory, setRealTimeHistory] = useState<{time: number, depth: number}[]>([])
@@ -229,17 +229,17 @@ export default function VideoEnCursoPage() {
             pressure: data.pressure || prevData.pressure,
           }))
           
-          // Actualizar historial de presión para el gráfico
-          if (data.pressure !== undefined) {
-            setPressureHistory(prev => {
-              const newHistory = [...prev, data.pressure]
+          // Actualizar historial de altitud para el gráfico
+          if (data.altitude !== undefined) {
+            setAltitudeHistory(prev => {
+              const newHistory = [...prev, data.altitude]
               // Mantener solo los últimos 50 valores (50 segundos)
               return newHistory.slice(-50)
             })
           }
           
-          // Forzar actualización del gráfico simulado cada segundo
-          if (pressureHistory.length === 0) {
+          // Forzar actualización del gráfico simulado cada segundo si no hay datos reales
+          if (altitudeHistory.length === 0) {
             setChartUpdateTrigger(prev => prev + 1)
           }
         })
@@ -514,13 +514,13 @@ export default function VideoEnCursoPage() {
 
   // Generate depth chart data for immersion profile
   const generateDepthChartData = () => {
-    if (pressureHistory.length === 0) {
+    if (altitudeHistory.length === 0) {
       // Si no hay datos del sensor, generar perfil de inmersión realista
       // Usar chartUpdateTrigger para forzar recálculo
       return generateRealisticDiveProfile()
     }
-    // Convert pressure history to depth
-    return pressureHistory.map(pressure => pressureToDepth(pressure))
+    // Usar datos de altitud directamente (convertir a profundidad negativa)
+    return altitudeHistory.map(altitude => Math.max(0, -altitude))
   }
 
   // Calculate elapsed time since inspection started
@@ -776,13 +776,13 @@ export default function VideoEnCursoPage() {
               </div>
             </div>
 
-            {/* Bottom left - Pressure chart and rotation indicators */}
+            {/* Bottom left - Altitude chart and rotation indicators */}
             <div className="absolute bottom-4 left-4 flex flex-col gap-2">
               {/* Gráfico de Perfil de Inmersión (Profundidad) */}
               <div className="bg-black/80 text-white p-3 rounded border border-blue-500/30">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-semibold text-blue-300">Perfil de Inmersión</div>
-                  {pressureHistory.length === 0 && (
+                  {altitudeHistory.length === 0 && (
                     <div className="text-xs text-yellow-400">SIM</div>
                   )}
                 </div>
@@ -850,8 +850,8 @@ export default function VideoEnCursoPage() {
                 <div className="text-xs mt-1 text-center">
                   <div className="flex justify-between">
                     <span className="text-blue-300">
-                      Profundidad: {pressureHistory.length > 0 ? 
-                        pressureToDepth(sensorData.pressure || 101325).toFixed(1) + 'm' : 
+                      Profundidad: {altitudeHistory.length > 0 ? 
+                        Math.max(0, -(sensorData.altitude || 0)).toFixed(1) + 'm' : 
                         depthChartData[depthChartData.length - 1]?.toFixed(1) + 'm (SIM)'
                       }
                     </span>
