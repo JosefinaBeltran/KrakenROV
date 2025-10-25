@@ -457,8 +457,8 @@ export default function VideoEnCursoPage() {
           chartCaptureRef.current.captureCharts()
           
           // Esperar un poco para que se capturen los gráficos
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          console.log('Gráficos capturados:', sensorCharts)
+          await new Promise(resolve => setTimeout(resolve, 1500))
+          console.log('Gráficos capturados después de esperar:', sensorCharts)
         } else {
           console.log('No se encontró la referencia del componente ChartCapture')
         }
