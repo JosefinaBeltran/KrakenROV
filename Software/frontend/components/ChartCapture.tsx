@@ -289,7 +289,57 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
 
   // Exponer la función captureCharts a través del ref
   React.useImperativeHandle(ref, () => ({
-    captureCharts
+    captureCharts: async () => {
+      return new Promise<{temperature: string, depth: string}>((resolve) => {
+        console.log('captureCharts llamada desde ref')
+        console.log('tempCanvasRef.current:', tempCanvasRef.current)
+        console.log('depthCanvasRef.current:', depthCanvasRef.current)
+        console.log('temperatureData length:', temperatureData.length)
+        console.log('altitudeData length:', altitudeData.length)
+        
+        if (!tempCanvasRef.current || !depthCanvasRef.current) {
+          console.log('Canvas no encontrado, no se pueden capturar los gráficos')
+          resolve({
+            temperature: '',
+            depth: ''
+          })
+          return
+        }
+
+        // Generar gráficos antes de capturar
+        if (temperatureData.length > 0) {
+          generateTemperatureChart(tempCanvasRef.current, temperatureData)
+        } else {
+          generateEmptyChart(tempCanvasRef.current, 'Sin datos de temperatura')
+        }
+
+        if (altitudeData.length > 0) {
+          generateDepthChart(depthCanvasRef.current, altitudeData)
+        } else {
+          generateEmptyChart(depthCanvasRef.current, 'Sin datos de altitud')
+        }
+
+        const temperatureImage = tempCanvasRef.current.toDataURL('image/png')
+        const depthImage = depthCanvasRef.current.toDataURL('image/png')
+
+        console.log('Gráficos capturados:', {
+          temperatureLength: temperatureImage.length,
+          depthLength: depthImage.length
+        })
+
+        onChartCaptured({
+          temperature: temperatureImage,
+          depth: depthImage
+        })
+
+        resolve({
+          temperature: temperatureImage,
+          depth: depthImage
+        })
+
+        setIsCaptured(true)
+      })
+    }
   }))
 
   return (

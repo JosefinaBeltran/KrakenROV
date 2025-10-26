@@ -452,13 +452,12 @@ export default function VideoEnCursoPage() {
         console.log('Intentando capturar gráficos...')
         console.log('Datos disponibles - Temperatura:', temperatureHistory.length, 'Altitud:', altitudeHistory.length)
         
+        let capturedCharts = null
+        
         if (chartCaptureRef.current) {
           console.log('Ref encontrado, capturando gráficos')
-          chartCaptureRef.current.captureCharts()
-          
-          // Esperar un poco para que se capturen los gráficos
-          await new Promise(resolve => setTimeout(resolve, 1500))
-          console.log('Gráficos capturados después de esperar:', sensorCharts)
+          capturedCharts = await chartCaptureRef.current.captureCharts()
+          console.log('Gráficos capturados directamente:', capturedCharts)
         } else {
           console.log('No se encontró la referencia del componente ChartCapture')
         }
@@ -468,8 +467,10 @@ export default function VideoEnCursoPage() {
           capturedFrames,
           recordings, // base64 webm strings
           recordingTime,
-          sensorCharts, // Incluir gráficos de sensores
+          sensorCharts: capturedCharts || sensorCharts, // Usar gráficos capturados o los existentes
         }
+        
+        console.log('Gráficos finales que se guardarán:', inspectionWithFrames.sensorCharts)
 
         console.log('Saving inspeccion:', inspectionWithFrames)
         await saveInspeccion(inspectionWithFrames)
