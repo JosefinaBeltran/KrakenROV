@@ -26,7 +26,7 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
 
     const width = canvas.width
     const height = canvas.height
-    const padding = 40
+    const padding = 70 // Más espacio para las etiquetas
 
     // Limpiar canvas
     ctx.clearRect(0, 0, width, height)
@@ -100,14 +100,14 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
     ctx.textAlign = 'center'
     
     // Título
-    ctx.font = 'bold 16px Arial'
-    ctx.fillText('Gráfico de Temperatura', width / 2, 20)
+    ctx.font = 'bold 20px Arial'
+    ctx.fillText('Gráfico de Temperatura', width / 2, 30)
     
     // Eje Y
-    ctx.font = '12px Arial'
+    ctx.font = '14px Arial'
     ctx.textAlign = 'right'
-    ctx.fillText(`${maxTemp.toFixed(1)}°C`, padding - 10, padding + 5)
-    ctx.fillText(`${minTemp.toFixed(1)}°C`, padding - 10, height - padding + 5)
+    ctx.fillText(`${maxTemp.toFixed(1)}°C`, padding - 15, padding + 5)
+    ctx.fillText(`${minTemp.toFixed(1)}°C`, padding - 15, height - padding + 5)
     
     // Eje X
     ctx.textAlign = 'center'
@@ -121,7 +121,7 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
 
     const width = canvas.width
     const height = canvas.height
-    const padding = 40
+    const padding = 70 // Más espacio para las etiquetas
 
     // Limpiar canvas
     ctx.clearRect(0, 0, width, height)
@@ -198,14 +198,14 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
     ctx.textAlign = 'center'
     
     // Título
-    ctx.font = 'bold 16px Arial'
-    ctx.fillText('Perfil de Inmersión (Profundidad)', width / 2, 20)
+    ctx.font = 'bold 20px Arial'
+    ctx.fillText('Perfil de Inmersión (Profundidad)', width / 2, 30)
     
     // Eje Y
-    ctx.font = '12px Arial'
+    ctx.font = '14px Arial'
     ctx.textAlign = 'right'
-    ctx.fillText(`${maxDepth.toFixed(1)}m`, padding - 10, padding + 5)
-    ctx.fillText(`${minDepth.toFixed(1)}m`, padding - 10, height - padding + 5)
+    ctx.fillText(`${maxDepth.toFixed(1)}m`, padding - 15, padding + 5)
+    ctx.fillText(`${minDepth.toFixed(1)}m`, padding - 15, height - padding + 5)
     
     // Eje X
     ctx.textAlign = 'center'
@@ -346,13 +346,13 @@ export const ChartCapture = React.forwardRef<{ captureCharts: () => void }, Char
     <div className="hidden">
       <canvas
         ref={tempCanvasRef}
-        width={400}
-        height={300}
+        width={800}
+        height={400}
       />
       <canvas
         ref={depthCanvasRef}
-        width={400}
-        height={300}
+        width={800}
+        height={400}
       />
     </div>
   )
