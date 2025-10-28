@@ -13,10 +13,19 @@ import { useDatabase } from "@/hooks/useDatabase"
 export default function FormularioInspeccionPage() {
   const router = useRouter()
   const { saveTempInspeccionData } = useDatabase()
+  // Función para obtener la fecha local en formato YYYY-MM-DD sin problemas de zona horaria
+  const getLocalDateString = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   const [formData, setFormData] = useState({
     nombreInspeccion: "",
     lugarInspeccion: "",
-    fechaInspeccion: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
+    fechaInspeccion: getLocalDateString(), // Fecha actual en formato YYYY-MM-DD usando zona horaria local
     descripcion: "",
     nombreApellido: "",
     matricula: "",
@@ -61,7 +70,7 @@ export default function FormularioInspeccionPage() {
     setFormData({
       nombreInspeccion: "",
       lugarInspeccion: "",
-      fechaInspeccion: new Date().toISOString().split('T')[0], // Mantener fecha actual al limpiar
+      fechaInspeccion: getLocalDateString(), // Mantener fecha actual al limpiar usando zona horaria local
       descripcion: "",
       nombreApellido: "",
       matricula: "",

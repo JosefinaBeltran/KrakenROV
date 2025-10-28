@@ -50,6 +50,17 @@ export default function DetalleInspeccionPage() {
   }, [params.id, getInspeccionById])
 
   const formatDate = (dateString: string) => {
+    // Si la fecha viene en formato YYYY-MM-DD, parsearla correctamente sin conversión de zona horaria
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-').map(Number)
+      const date = new Date(year, month - 1, day) // month - 1 porque Date usa 0-indexed months
+      return date.toLocaleDateString("es-ES", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    }
+    // Para otros formatos, usar el método original
     const date = new Date(dateString)
     return date.toLocaleDateString("es-ES", {
       year: "numeric",

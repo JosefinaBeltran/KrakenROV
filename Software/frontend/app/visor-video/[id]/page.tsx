@@ -21,6 +21,7 @@ import {
   Video,
   Upload,
   Loader2,
+  FolderOpen,
 } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import { VideoControls } from "@/components/VideoControls"
@@ -246,6 +247,45 @@ export default function VisorVideoPage() {
 
   const handleAuthenticateWithGoogle = () => {
     window.location.href = '/api/auth/google'
+  }
+
+  const handleOpenFileExplorer = async () => {
+    if (!inspeccion || !inspeccion.recordings || inspeccion.recordings.length === 0) {
+      alert("No hay grabaciones disponibles para descargar")
+      return
+    }
+
+    // Get the selected recording
+    const selectedVideoData = inspeccion.recordings[selectedRecording]
+    if (!selectedVideoData) {
+      alert("No hay video seleccionado")
+      return
+    }
+
+    try {
+      // Convert base64 to blob
+      const response = await fetch(selectedVideoData)
+      const blob = await response.blob()
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `inspeccion_${inspeccion.nombreInspeccion.replace(/\s+/g, '_')}_${selectedRecording + 1}.webm`
+      
+      // Trigger download
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      // Clean up
+      window.URL.revokeObjectURL(url)
+      
+      alert("Video descargado exitosamente. Puedes encontrarlo en tu carpeta de Descargas.")
+    } catch (error) {
+      console.error('Error downloading video:', error)
+      alert("Error al descargar el video. Por favor, inténtalo nuevamente.")
+    }
   }
 
   const handleUploadToYouTube = async () => {
@@ -519,23 +559,23 @@ export default function VisorVideoPage() {
                   {/* Interactive Progress bar */}
                   <div className="mb-4">
                     <div 
-                      className="w-full bg-muted rounded-full h-2 cursor-pointer hover:h-3 transition-all duration-200 group"
+                      className="relative w-full bg-black/40 rounded-full h-1.5 cursor-pointer hover:h-2 transition-all duration-200 group"
                       onClick={handleSeek}
                       onMouseDown={handleSeekMouseDown}
                       onMouseUp={handleSeekMouseUp}
                     >
                       <div
-                        className="bg-primary h-2 rounded-full transition-all duration-300 group-hover:h-3"
+                        className="bg-red-600 h-full rounded-full transition-all duration-200"
                         style={{ width: `${progressPercentage}%` }}
                       />
                       {/* Seek indicator */}
                       <div 
-                        className="absolute top-1/2 transform -translate-y-1/2 w-4 h-4 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        className="absolute top-1/2 transform -translate-y-1/2 w-4 h-4 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 border-2 border-white shadow-lg"
                         style={{ left: `${progressPercentage}%`, marginLeft: '-8px' }}
                       />
                     </div>
                     {/* Time display */}
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2 font-medium">
                       <span>{formatTime(currentTime)}</span>
                       <span>{formatTime(duration)}</span>
                     </div>
@@ -683,9 +723,18 @@ export default function VisorVideoPage() {
                         </DialogContent>
                       </Dialog>
                       <Button
+                        onClick={handleOpenFileExplorer}
+                        disabled={!inspeccion.recordings || inspeccion.recordings.length === 0}
+                        variant="outline"
+                        className="flex-1 border-border hover:bg-secondary bg-transparent"
+                      >
+                        <FolderOpen className="w-4 h-4 mr-2" />
+                        Descargar Video
+                      </Button>
+                      <Button
                         onClick={handleUploadToYouTube}
                         disabled={isUploading || !inspeccion.recordings || inspeccion.recordings.length === 0}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white min-w-0"
                       >
                         {isUploading ? (
                           <>
@@ -699,8 +748,8 @@ export default function VisorVideoPage() {
                           </>
                         ) : (
                           <>
-                            <Youtube className="w-4 h-4 mr-2" />
-                            Autenticar y Subir
+                            <Youtube className="w-4 h-4 mr-2 shrink-0" />
+                            <span className="truncate">Autenticar y Subir</span>
                           </>
                         )}
                       </Button>
@@ -714,6 +763,15 @@ export default function VisorVideoPage() {
                         : "No hay grabaciones disponibles para subir. Agrega un enlace manualmente."}
                     </p>
                     <div className="flex gap-2">
+                      <Button
+                        onClick={handleOpenFileExplorer}
+                        disabled={!inspeccion.recordings || inspeccion.recordings.length === 0}
+                        variant="outline"
+                        className="flex-1 border-border hover:bg-secondary bg-transparent"
+                      >
+                        <FolderOpen className="w-4 h-4 mr-2" />
+                        Descargar Video
+                      </Button>
                       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                         <DialogTrigger asChild>
                           <Button variant="outline" className="flex-1 border-border hover:bg-secondary bg-transparent">
@@ -753,7 +811,7 @@ export default function VisorVideoPage() {
                       <Button
                         onClick={handleUploadToYouTube}
                         disabled={isUploading || !inspeccion.recordings || inspeccion.recordings.length === 0}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white min-w-0"
                       >
                         {isUploading ? (
                           <>
@@ -762,13 +820,13 @@ export default function VisorVideoPage() {
                           </>
                         ) : isAuthenticated ? (
                           <>
-                            <Upload className="w-4 h-4 mr-2" />
-                            Subir a YouTube
+                            <Upload className="w-4 h-4 mr-2 shrink-0" />
+                            <span className="truncate">Subir a YouTube</span>
                           </>
                         ) : (
                           <>
-                            <Youtube className="w-4 h-4 mr-2" />
-                            Autenticar y Subir
+                            <Youtube className="w-4 h-4 mr-2 shrink-0" />
+                            <span className="truncate">Autenticar y Subir</span>
                           </>
                         )}
                       </Button>
