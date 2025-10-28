@@ -29,10 +29,20 @@ export default function EditarInspeccionPage() {
   const params = useParams()
   const { getInspeccionById, updateInspeccion } = useDatabase()
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
+  
+  // Función para obtener la fecha local en formato YYYY-MM-DD sin problemas de zona horaria
+  const getLocalDateString = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  
   const [formData, setFormData] = useState({
     nombreInspeccion: "",
     lugarInspeccion: "",
-    fechaInspeccion: "",
+    fechaInspeccion: getLocalDateString(), // Always use current date
     descripcion: "",
     nombreApellido: "",
     matricula: "",
@@ -52,7 +62,7 @@ export default function EditarInspeccionPage() {
           setFormData({
             nombreInspeccion: found.nombreInspeccion,
             lugarInspeccion: found.lugarInspeccion,
-            fechaInspeccion: found.fechaInspeccion,
+            fechaInspeccion: getLocalDateString(), // Always use current date
             descripcion: found.descripcion,
             nombreApellido: found.nombreApellido,
             matricula: found.matricula,
@@ -70,7 +80,7 @@ export default function EditarInspeccionPage() {
             setFormData({
               nombreInspeccion: found.nombreInspeccion,
               lugarInspeccion: found.lugarInspeccion,
-              fechaInspeccion: found.fechaInspeccion,
+              fechaInspeccion: getLocalDateString(), // Always use current date
               descripcion: found.descripcion,
               nombreApellido: found.nombreApellido,
               matricula: found.matricula,
@@ -101,9 +111,7 @@ export default function EditarInspeccionPage() {
     if (!formData.lugarInspeccion.trim()) {
       newErrors.lugarInspeccion = "El lugar de la inspección es requerido"
     }
-    if (!formData.fechaInspeccion) {
-      newErrors.fechaInspeccion = "La fecha de la inspección es requerida"
-    }
+    // No need to validate fecha since it's always set to current date
     if (!formData.descripcion.trim()) {
       newErrors.descripcion = "La descripción es requerida"
     }
@@ -123,7 +131,7 @@ export default function EditarInspeccionPage() {
       setFormData({
         nombreInspeccion: inspeccion.nombreInspeccion,
         lugarInspeccion: inspeccion.lugarInspeccion,
-        fechaInspeccion: inspeccion.fechaInspeccion,
+        fechaInspeccion: getLocalDateString(), // Always use current date
         descripcion: inspeccion.descripcion,
         nombreApellido: inspeccion.nombreApellido,
         matricula: inspeccion.matricula,
@@ -140,7 +148,7 @@ export default function EditarInspeccionPage() {
         ...inspeccion,
         nombreInspeccion: formData.nombreInspeccion,
         lugarInspeccion: formData.lugarInspeccion,
-        fechaInspeccion: formData.fechaInspeccion,
+        fechaInspeccion: getLocalDateString(), // Always use current date
         descripcion: formData.descripcion,
         nombreApellido: formData.nombreApellido,
         matricula: formData.matricula,
@@ -159,7 +167,7 @@ export default function EditarInspeccionPage() {
                 ...i,
                 nombreInspeccion: formData.nombreInspeccion,
                 lugarInspeccion: formData.lugarInspeccion,
-                fechaInspeccion: formData.fechaInspeccion,
+                fechaInspeccion: getLocalDateString(), // Always use current date
                 descripcion: formData.descripcion,
                 nombreApellido: formData.nombreApellido,
                 matricula: formData.matricula,
@@ -256,10 +264,10 @@ export default function EditarInspeccionPage() {
                   id="fechaInspeccion"
                   type="date"
                   value={formData.fechaInspeccion}
-                  onChange={(e) => handleInputChange("fechaInspeccion", e.target.value)}
-                  className="bg-input border-border"
+                  disabled
+                  className="bg-muted border-border cursor-not-allowed opacity-70"
                 />
-                {errors.fechaInspeccion && <p className="text-destructive text-sm">{errors.fechaInspeccion}</p>}
+                <p className="text-xs text-muted-foreground">La fecha se actualiza automáticamente al día actual</p>
               </div>
 
               <div className="space-y-2">

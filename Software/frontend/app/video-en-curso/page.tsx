@@ -44,6 +44,8 @@ export default function VideoEnCursoPage() {
   const { getTempInspeccionData, saveInspeccion, clearTempInspeccionData, isInitialized, isLoading } = useDatabase()
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
+  const [inspectionTime, setInspectionTime] = useState(0)
+  const [inspectionStarted, setInspectionStarted] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [capturedFrames, setCapturedFrames] = useState<string[]>([])
   const [inspeccionData, setInspeccionData] = useState<InspeccionData | null>(null)
@@ -284,7 +286,7 @@ export default function VideoEnCursoPage() {
     return () => clearInterval(timer)
   }, [])
 
-  // Recording timer
+  // Recording timer (for individual recording display)
   useEffect(() => {
     let timer: NodeJS.Timeout
     if (isRecording) {
@@ -294,6 +296,17 @@ export default function VideoEnCursoPage() {
     }
     return () => clearInterval(timer)
   }, [isRecording])
+
+  // Inspection timer (total time from first recording to finalize)
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    if (inspectionStarted) {
+      timer = setInterval(() => {
+        setInspectionTime((prev) => prev + 1)
+      }, 1000)
+    }
+    return () => clearInterval(timer)
+  }, [inspectionStarted])
 
   // Initialize camera
   useEffect(() => {
@@ -370,6 +383,12 @@ export default function VideoEnCursoPage() {
       mediaRecorder.start()
       setIsRecording(true)
       setRecordingTime(0)
+      
+      // Start inspection timer on first recording
+      if (!inspectionStarted) {
+        setInspectionStarted(true)
+        setInspectionTime(0)
+      }
     } catch (err) {
       console.error("Failed to start recording", err)
       setIsRecording(false)
@@ -462,11 +481,14 @@ export default function VideoEnCursoPage() {
           console.log('No se encontró la referencia del componente ChartCapture')
         }
         
+        // Stop inspection timer
+        setInspectionStarted(false)
+        
         const inspectionWithFrames = {
           ...inspeccionData,
           capturedFrames,
           recordings, // base64 webm strings
-          recordingTime,
+          recordingTime: inspectionTime, // Use total inspection time instead of individual recording time
           sensorCharts: capturedCharts || sensorCharts, // Usar gráficos capturados o los existentes
         }
         
@@ -675,11 +697,11 @@ export default function VideoEnCursoPage() {
                         <span className="font-medium">{sensorData.temperatura.toFixed(1)}°C</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Humedad:</span>
+                        <span className="text-muted-foreground">Humedad (WIP):</span>
                         <span className="font-medium">{sensorData.humedad.toFixed(1)}%</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Distancia:</span>
+                        <span className="text-muted-foreground">Distancia (WIP):</span>
                         <span className="font-medium">{sensorData.distancia.toFixed(1)} cm</span>
                       </div>
                       <div className="flex justify-between">
@@ -753,7 +775,7 @@ export default function VideoEnCursoPage() {
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-border">
-                    <Label htmlFor="mswitch" className="text-sm text-muted-foreground">Mediciones</Label>
+                    <Label htmlFor="mswitch" className="text-sm text-muted-foreground">Mediciones (WIP)</Label>
                     <Switch id="mswitch" checked={measurementOn} onCheckedChange={toggleMeasurement} />
                   </div>
                 </div>

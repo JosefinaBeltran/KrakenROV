@@ -144,7 +144,7 @@ export default function DetalleInspeccionPage() {
               <div className="flex items-center gap-3">
                 <Video className="w-5 h-5 text-primary" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Duración de grabación</p>
+                  <p className="text-sm text-muted-foreground">Duración de la inspección</p>
                   <p className="font-medium">{formatTime(inspeccion.recordingTime)}</p>
                 </div>
               </div>

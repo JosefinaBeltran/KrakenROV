@@ -49,9 +49,7 @@ export default function FormularioInspeccionPage() {
     if (!formData.lugarInspeccion.trim()) {
       newErrors.lugarInspeccion = "El lugar de la inspección es requerido"
     }
-    if (!formData.fechaInspeccion) {
-      newErrors.fechaInspeccion = "La fecha de la inspección es requerida"
-    }
+    // No need to validate fecha since it's always set to current date
     if (!formData.descripcion.trim()) {
       newErrors.descripcion = "La descripción es requerida"
     }
@@ -80,10 +78,10 @@ export default function FormularioInspeccionPage() {
 
   const handleSiguiente = async () => {
     if (validateForm()) {
-      // Normalize date to avoid TZ shifting (store as YYYY-MM-DD)
+      // Always use current date when saving
       const normalized = {
         ...formData,
-        fechaInspeccion: formData.fechaInspeccion,
+        fechaInspeccion: getLocalDateString(), // Ensure we always use current date
       }
       // Store form data in database for the video recording screen
       try {
@@ -148,10 +146,10 @@ export default function FormularioInspeccionPage() {
                   id="fechaInspeccion"
                   type="date"
                   value={formData.fechaInspeccion}
-                  onChange={(e) => handleInputChange("fechaInspeccion", e.target.value)}
-                  className="bg-input border-border"
+                  disabled
+                  className="bg-muted border-border cursor-not-allowed opacity-70"
                 />
-                {errors.fechaInspeccion && <p className="text-destructive text-sm">{errors.fechaInspeccion}</p>}
+                <p className="text-xs text-muted-foreground">La fecha se establece automáticamente al día actual</p>
               </div>
 
               <div className="space-y-2">

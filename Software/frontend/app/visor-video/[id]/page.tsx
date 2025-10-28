@@ -19,8 +19,6 @@ import {
   Clock,
   Youtube,
   Video,
-  Upload,
-  Loader2,
   FolderOpen,
 } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
@@ -54,12 +52,11 @@ export default function VisorVideoPage() {
   const [linkSaved, setLinkSaved] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedRecording, setSelectedRecording] = useState(0) // Added state for selected recording
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isSeeking, setIsSeeking] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
+  const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null)
+  const [isVideoLoading, setIsVideoLoading] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const videoContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -89,68 +86,186 @@ export default function VisorVideoPage() {
     }
     
     loadInspeccion()
-    // Check authentication status
-    checkAuthStatus()
   }, [params.id, getInspeccionById])
-
-  const checkAuthStatus = async () => {
-    try {
-      const response = await fetch('/api/auth/status')
-      const data = await response.json()
-      setIsAuthenticated(data.authenticated)
-    } catch (error) {
-      console.log('Auth check failed:', error)
-      setIsAuthenticated(false)
-    }
-  }
-
-  // Check for auth success in URL params
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const authStatus = urlParams.get('auth')
-    
-    if (authStatus === 'success') {
-      setIsAuthenticated(true)
-      console.log('OAuth2 authentication successful')
-      // Clean URL
-      window.history.replaceState({}, document.title, window.location.pathname)
-    } else if (authStatus === 'demo') {
-      setIsAuthenticated(true)
-      console.log('Demo mode activated')
-      // Clean URL
-      window.history.replaceState({}, document.title, window.location.pathname)
-    }
-    
-    if (urlParams.get('error')) {
-      console.error('Auth error:', urlParams.get('error'))
-      alert(`Error de autenticación: ${urlParams.get('error')}`)
-      // Clean URL
-      window.history.replaceState({}, document.title, window.location.pathname)
-    }
-  }, [])
 
   // Wire up HTML5 video events for real playback
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
 
-    const onLoaded = () => setDuration(Math.floor(video.duration || 0))
-    const onTime = () => setCurrentTime(Math.floor(video.currentTime || 0))
+    const updateDuration = () => {
+      const videoDuration = video.duration
+      console.log('Checking video duration:', videoDuration, 'readyState:', video.readyState)
+      if (videoDuration && !isNaN(videoDuration) && isFinite(videoDuration) && videoDuration > 0) {
+        console.log('Setting duration to:', videoDuration)
+        setDuration(videoDuration)
+      } else {
+        console.log('Duration not valid yet')
+      }
+    }
+
+    const onLoaded = () => {
+      console.log('loadedmetadata event fired')
+      updateDuration()
+    }
+    
+    const onLoadedData = () => {
+      console.log('loadeddata event fired')
+      updateDuration()
+    }
+    
+    const onCanPlay = () => {
+      console.log('canplay event fired')
+      updateDuration()
+    }
+    
+    const onCanPlayThrough = () => {
+      console.log('canplaythrough event fired')
+      updateDuration()
+    }
+    
+    const onDurationChange = () => {
+      console.log('durationchange event fired')
+      updateDuration()
+    }
+    
+    const onTime = () => {
+      if (!isSeeking) {
+        setCurrentTime(video.currentTime || 0)
+      }
+    }
+    
     const onEnd = () => setIsPlaying(false)
 
     video.addEventListener("loadedmetadata", onLoaded)
+    video.addEventListener("loadeddata", onLoadedData)
+    video.addEventListener("canplay", onCanPlay)
+    video.addEventListener("canplaythrough", onCanPlayThrough)
+    video.addEventListener("durationchange", onDurationChange)
     video.addEventListener("timeupdate", onTime)
     video.addEventListener("ended", onEnd)
+    
+    // Try to get duration immediately if video is already loaded
+    if (video.readyState >= 1) {
+      console.log('Video already loaded, checking duration immediately')
+      updateDuration()
+    }
+    
     return () => {
       video.removeEventListener("loadedmetadata", onLoaded)
+      video.removeEventListener("loadeddata", onLoadedData)
+      video.removeEventListener("canplay", onCanPlay)
+      video.removeEventListener("canplaythrough", onCanPlayThrough)
+      video.removeEventListener("durationchange", onDurationChange)
       video.removeEventListener("timeupdate", onTime)
       video.removeEventListener("ended", onEnd)
     }
-  }, [])
+  }, [isSeeking])
+
+  // Convert base64 data URL to blob URL for better video handling
+  useEffect(() => {
+    let currentBlobUrl: string | null = null
+
+    const convertToBlob = async () => {
+      if (!inspeccion || !inspeccion.recordings || inspeccion.recordings.length === 0) {
+        setVideoBlobUrl(null)
+        setIsVideoLoading(false)
+        return
+      }
+
+      const currentDataUrl = inspeccion.recordings[selectedRecording]
+      if (!currentDataUrl) {
+        setVideoBlobUrl(null)
+        setIsVideoLoading(false)
+        return
+      }
+
+      try {
+        setIsVideoLoading(true)
+        console.log('Converting base64 to blob URL for recording:', selectedRecording)
+        // Fetch the data URL and convert to blob
+        const response = await fetch(currentDataUrl)
+        const blob = await response.blob()
+        currentBlobUrl = URL.createObjectURL(blob)
+        
+        console.log('Blob URL created successfully:', currentBlobUrl.substring(0, 50) + '...', 'Blob size:', blob.size, 'bytes')
+        setVideoBlobUrl(currentBlobUrl)
+      } catch (error) {
+        console.error('Error converting to blob URL:', error)
+        // Fallback to using data URL directly
+        setVideoBlobUrl(currentDataUrl)
+        setIsVideoLoading(false)
+      }
+    }
+
+    convertToBlob()
+
+    // Cleanup on unmount or when recording changes
+    return () => {
+      if (currentBlobUrl) {
+        console.log('Revoking blob URL:', currentBlobUrl.substring(0, 50) + '...')
+        URL.revokeObjectURL(currentBlobUrl)
+      }
+    }
+  }, [selectedRecording, inspeccion])
+
+  // Reset video when blob URL changes
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    
+    if (!videoBlobUrl) {
+      console.log('No video source available')
+      setDuration(0)
+      setCurrentTime(0)
+      setIsPlaying(false)
+      setIsVideoLoading(false)
+      return
+    }
+    
+    console.log('Video blob URL changed, resetting player')
+    video.pause()
+    video.currentTime = 0
+    setCurrentTime(0)
+    setIsPlaying(false)
+    setDuration(0)
+    
+    // Force video to reload with new source
+    video.load()
+    
+    // Add listeners to track loading progress
+    const checkDuration = () => {
+      console.log('Video metadata loaded, duration:', video.duration, 'readyState:', video.readyState)
+      if (video.duration && !isNaN(video.duration) && video.duration > 0) {
+        setDuration(video.duration)
+        setIsVideoLoading(false)
+      }
+    }
+    
+    const onCanPlay = () => {
+      console.log('Video can play, duration:', video.duration)
+      setIsVideoLoading(false)
+    }
+    
+    const onError = (e: Event) => {
+      console.error('Video loading error:', e)
+      setIsVideoLoading(false)
+    }
+    
+    video.addEventListener('loadedmetadata', checkDuration, { once: true })
+    video.addEventListener('canplay', onCanPlay, { once: true })
+    video.addEventListener('error', onError, { once: true })
+    
+    return () => {
+      video.removeEventListener('loadedmetadata', checkDuration)
+      video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('error', onError)
+    }
+  }, [videoBlobUrl])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
+    const secs = Math.floor(seconds % 60)
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
   }
 
@@ -245,10 +360,6 @@ export default function VisorVideoPage() {
     }
   }
 
-  const handleAuthenticateWithGoogle = () => {
-    window.location.href = '/api/auth/google'
-  }
-
   const handleOpenFileExplorer = async () => {
     if (!inspeccion || !inspeccion.recordings || inspeccion.recordings.length === 0) {
       alert("No hay grabaciones disponibles para descargar")
@@ -288,127 +399,54 @@ export default function VisorVideoPage() {
     }
   }
 
-  const handleUploadToYouTube = async () => {
-    if (!inspeccion || !inspeccion.recordings || inspeccion.recordings.length === 0) {
-      alert("No hay grabaciones disponibles para subir")
-      return
-    }
-
-    if (!isAuthenticated) {
-      const shouldAuth = confirm("Para subir videos a YouTube necesitas autenticarte con Google. ¿Quieres continuar?")
-      if (shouldAuth) {
-        handleAuthenticateWithGoogle()
-      }
-      return
-    }
-
-    setIsUploading(true)
-    setUploadProgress(0)
-
-    try {
-      // Get the selected recording
-      const selectedVideoData = inspeccion.recordings[selectedRecording]
-      if (!selectedVideoData) {
-        throw new Error("No hay video seleccionado")
-      }
-
-      // Convert base64 to blob
-      const response = await fetch(selectedVideoData)
-      const blob = await response.blob()
-
-      // Create FormData for upload
-      const formData = new FormData()
-      formData.append('video', blob, `inspeccion_${inspeccion.id}_${selectedRecording + 1}.webm`)
-      formData.append('title', inspeccion.nombreInspeccion) // Solo el nombre de la inspección
-      formData.append('description', `Inspección realizada en ${inspeccion.lugarInspeccion} el ${new Date(inspeccion.fechaInspeccion).toLocaleDateString('es-ES')}. Inspector: ${inspeccion.nombreApellido}`)
-
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval)
-            return prev
-          }
-          return prev + Math.random() * 10
-        })
-      }, 500)
-
-      // Upload to YouTube
-      const uploadResponse = await fetch('/api/upload-youtube', {
-        method: 'POST',
-        body: formData,
-      })
-
-      clearInterval(progressInterval)
-      setUploadProgress(100)
-
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json()
-        if (errorData.needsAuth) {
-          setIsAuthenticated(false)
-          throw new Error('Sesión expirada. Por favor, auténtica nuevamente con Google.')
-        }
-        throw new Error(errorData.error || 'Error al subir el video')
-      }
-
-      const result = await uploadResponse.json()
-      const youtubeUrl = `https://www.youtube.com/watch?v=${result.videoId}`
-
-      // Save the YouTube link
-      try {
-        const updatedInspeccion = {
-          ...inspeccion,
-          youtubeLink: youtubeUrl
-        }
-        await updateInspeccion(updatedInspeccion)
-        setInspeccion(updatedInspeccion)
-        setLinkSaved(true)
-        setTimeout(() => setLinkSaved(false), 5000)
-      } catch (error) {
-        console.error('Error saving youtube link after upload:', error)
-        // Fallback to localStorage
-        const data = localStorage.getItem("inspecciones")
-        if (data) {
-          const inspecciones: Inspeccion[] = JSON.parse(data)
-          const updatedInspecciones = inspecciones.map((i) =>
-            i.id === inspeccion.id ? { ...i, youtubeLink: youtubeUrl } : i,
-          )
-          localStorage.setItem("inspecciones", JSON.stringify(updatedInspecciones))
-          setInspeccion({ ...inspeccion, youtubeLink: youtubeUrl })
-          setLinkSaved(true)
-          setTimeout(() => setLinkSaved(false), 5000)
-        }
-      }
-
-    } catch (error) {
-      console.error('Error uploading to YouTube:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-      alert(`Error al subir el video a YouTube: ${errorMessage}`)
-    } finally {
-      setIsUploading(false)
-      setUploadProgress(0)
-    }
-  }
-
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const video = videoRef.current
     if (!video || !duration) return
 
     const rect = e.currentTarget.getBoundingClientRect()
     const clickX = e.clientX - rect.left
-    const percentage = clickX / rect.width
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width)) // Clamp between 0 and 1
     const newTime = percentage * duration
     
     video.currentTime = newTime
     setCurrentTime(newTime)
   }
 
-  const handleSeekMouseDown = () => {
-    setIsSeeking(true)
-  }
+  const handleSeekStart = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const video = videoRef.current
+    if (!video || !duration) {
+      console.log('Cannot seek - video or duration not available', { video: !!video, duration })
+      return
+    }
 
-  const handleSeekMouseUp = () => {
-    setIsSeeking(false)
+    setIsSeeking(true)
+    handleSeek(e)
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const video = videoRef.current
+      const target = e.currentTarget
+      if (!video || !duration || !target) return
+
+      const rect = target.getBoundingClientRect()
+      const clickX = moveEvent.clientX - rect.left
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width))
+      const newTime = percentage * duration
+      
+      video.currentTime = newTime
+      setCurrentTime(newTime)
+    }
+
+    const handleMouseUp = () => {
+      setIsSeeking(false)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
   }
 
   const handleFullscreen = async () => {
@@ -458,7 +496,6 @@ export default function VisorVideoPage() {
   }
 
   const totalRecordings = inspeccion.recordings?.length || 0
-  const activeSrc = totalRecordings > 0 ? inspeccion.recordings![selectedRecording] : undefined
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
@@ -522,13 +559,16 @@ export default function VisorVideoPage() {
                   ref={videoContainerRef}
                   className="relative bg-muted aspect-video flex items-center justify-center"
                 >
-                  {activeSrc ? (
+                  {videoBlobUrl ? (
                     <video
+                      key={videoBlobUrl}
                       ref={videoRef}
-                      src={activeSrc}
+                      src={videoBlobUrl}
                       controls={false}
                       muted={isMuted}
                       className="w-full h-full object-contain bg-black"
+                      preload="auto"
+                      playsInline
                     />
                   ) : (
                     <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
@@ -542,8 +582,18 @@ export default function VisorVideoPage() {
                     </div>
                   )}
 
+                  {/* Loading indicator */}
+                  {isVideoLoading && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-2"></div>
+                        <p className="text-white text-sm">Cargando video...</p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Play button overlay */}
-                  {activeSrc && !isPlaying && (
+                  {videoBlobUrl && !isPlaying && !isVideoLoading && (
                     <Button
                       onClick={handlePlayPause}
                       size="lg"
@@ -559,19 +609,18 @@ export default function VisorVideoPage() {
                   {/* Interactive Progress bar */}
                   <div className="mb-4">
                     <div 
-                      className="relative w-full bg-black/40 rounded-full h-1.5 cursor-pointer hover:h-2 transition-all duration-200 group"
-                      onClick={handleSeek}
-                      onMouseDown={handleSeekMouseDown}
-                      onMouseUp={handleSeekMouseUp}
+                      className="relative w-full bg-muted/60 rounded-full h-2 cursor-pointer hover:h-2.5 transition-all duration-200 group"
+                      onMouseDown={handleSeekStart}
+                      title={`${formatTime(currentTime)} / ${formatTime(duration)}`}
                     >
                       <div
-                        className="bg-red-600 h-full rounded-full transition-all duration-200"
+                        className="bg-primary h-full rounded-full transition-all duration-100 pointer-events-none"
                         style={{ width: `${progressPercentage}%` }}
                       />
                       {/* Seek indicator */}
                       <div 
-                        className="absolute top-1/2 transform -translate-y-1/2 w-4 h-4 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 border-2 border-white shadow-lg"
-                        style={{ left: `${progressPercentage}%`, marginLeft: '-8px' }}
+                        className="absolute top-1/2 transform -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 border-2 border-background shadow-lg pointer-events-none"
+                        style={{ left: `${progressPercentage}%`, marginLeft: '-6px' }}
                       />
                     </div>
                     {/* Time display */}
@@ -685,12 +734,12 @@ export default function VisorVideoPage() {
                         {inspeccion.youtubeLink}
                       </a>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                         <DialogTrigger asChild>
-                          <Button variant="outline" className="flex-1 border-border hover:bg-secondary bg-transparent">
-                            <Youtube className="w-4 h-4 mr-2" />
-                            Actualizar Enlace
+                          <Button variant="outline" className="flex-1 min-w-0 border-border hover:bg-secondary bg-transparent">
+                            <Youtube className="w-4 h-4 mr-2 shrink-0" />
+                            <span className="truncate">Actualizar Enlace</span>
                           </Button>
                         </DialogTrigger>
                         <DialogContent>
@@ -726,32 +775,10 @@ export default function VisorVideoPage() {
                         onClick={handleOpenFileExplorer}
                         disabled={!inspeccion.recordings || inspeccion.recordings.length === 0}
                         variant="outline"
-                        className="flex-1 border-border hover:bg-secondary bg-transparent"
+                        className="flex-1 min-w-0 border-border hover:bg-secondary bg-transparent"
                       >
-                        <FolderOpen className="w-4 h-4 mr-2" />
-                        Descargar Video
-                      </Button>
-                      <Button
-                        onClick={handleUploadToYouTube}
-                        disabled={isUploading || !inspeccion.recordings || inspeccion.recordings.length === 0}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white min-w-0"
-                      >
-                        {isUploading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Subiendo...
-                          </>
-                        ) : isAuthenticated ? (
-                          <>
-                            <Upload className="w-4 h-4 mr-2" />
-                            Subir Video
-                          </>
-                        ) : (
-                          <>
-                            <Youtube className="w-4 h-4 mr-2 shrink-0" />
-                            <span className="truncate">Autenticar y Subir</span>
-                          </>
-                        )}
+                        <FolderOpen className="w-4 h-4 mr-2 shrink-0" />
+                        <span className="truncate">Descargar Video</span>
                       </Button>
                     </div>
                   </div>
@@ -762,21 +789,21 @@ export default function VisorVideoPage() {
                         ? "Sube automáticamente una grabación a YouTube o agrega un enlace manualmente."
                         : "No hay grabaciones disponibles para subir. Agrega un enlace manualmente."}
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Button
                         onClick={handleOpenFileExplorer}
                         disabled={!inspeccion.recordings || inspeccion.recordings.length === 0}
                         variant="outline"
-                        className="flex-1 border-border hover:bg-secondary bg-transparent"
+                        className="flex-1 min-w-0 border-border hover:bg-secondary bg-transparent"
                       >
-                        <FolderOpen className="w-4 h-4 mr-2" />
-                        Descargar Video
+                        <FolderOpen className="w-4 h-4 mr-2 shrink-0" />
+                        <span className="truncate">Descargar Video</span>
                       </Button>
                       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                         <DialogTrigger asChild>
-                          <Button variant="outline" className="flex-1 border-border hover:bg-secondary bg-transparent">
-                            <Youtube className="w-4 h-4 mr-2" />
-                            Agregar Enlace
+                          <Button variant="outline" className="flex-1 min-w-0 border-border hover:bg-secondary bg-transparent">
+                            <Youtube className="w-4 h-4 mr-2 shrink-0" />
+                            <span className="truncate">Agregar Enlace</span>
                           </Button>
                         </DialogTrigger>
                         <DialogContent>
@@ -808,43 +835,6 @@ export default function VisorVideoPage() {
                           </div>
                         </DialogContent>
                       </Dialog>
-                      <Button
-                        onClick={handleUploadToYouTube}
-                        disabled={isUploading || !inspeccion.recordings || inspeccion.recordings.length === 0}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white min-w-0"
-                      >
-                        {isUploading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Subiendo...
-                          </>
-                        ) : isAuthenticated ? (
-                          <>
-                            <Upload className="w-4 h-4 mr-2 shrink-0" />
-                            <span className="truncate">Subir a YouTube</span>
-                          </>
-                        ) : (
-                          <>
-                            <Youtube className="w-4 h-4 mr-2 shrink-0" />
-                            <span className="truncate">Autenticar y Subir</span>
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {isUploading && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Subiendo video...</span>
-                      <span>{Math.round(uploadProgress)}%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className="bg-red-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
                     </div>
                   </div>
                 )}
@@ -852,7 +842,7 @@ export default function VisorVideoPage() {
                 {linkSaved && (
                   <div className="flex items-center gap-2 text-green-600 text-sm">
                     <Check className="w-4 h-4" />
-                    {isUploading ? "Video subido y enlace guardado correctamente" : "Enlace guardado correctamente"}
+                    Enlace guardado correctamente
                   </div>
                 )}
               </CardContent>
