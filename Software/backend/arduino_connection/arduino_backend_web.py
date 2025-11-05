@@ -1,52 +1,44 @@
-# backend.py
+# backend_optimizado.py
 
 from flask import Flask, jsonify
 from flask_cors import CORS
 import serial
-import re
+import json # Usamos la librería json
 import time
 
-# Configuración serial
-SerialPort = "COM3"
-baudRate = 9600
-
+# --- Configuración serial (igual que antes) ---
+SerialPort = "COM4"
+baudRate = 115200
 try:
     serialConnection = serial.Serial(SerialPort, baudRate, timeout=1)
     print(f"Conectado a {SerialPort} a {baudRate} baudios.")
-    time.sleep(2)  # Espera para estabilizar conexión
+    time.sleep(2)
 except Exception as e:
     print(f"No se logró la conexión con el puerto: {e}")
     exit(1)
 
-# Configuración Flask
+# --- Configuración Flask (igual que antes) ---
 app = Flask(__name__)
-CORS(app)  # Permitir acceso desde cualquier origen
-
-def leer_datos():
-    raw_line = serialConnection.readline().decode('utf-8').strip()
-    print(raw_line)
-    dist_match = re.search(r'Dist:\s*(-?[\d.]+)', raw_line)
-    temp_match = re.search(r'Temp:\s*(-?[\d.]+)', raw_line)
-    hum_match = re.search(r'Hum:\s*(-?[\d.]+)', raw_line)
-    motor_match = re.search(r'Motor:\s*(\w+)', raw_line)
-
-    if dist_match and temp_match and hum_match and motor_match:
-        return {
-            "temperature": float(temp_match.group(1)),
-            "humidity": float(hum_match.group(1)),
-            "distance": float(dist_match.group(1)),
-            "motor": motor_match.group(1)
-        }
-    else:
-        return None
+CORS(app)
 
 @app.route("/data")
 def get_data():
-    for _ in range(5):  # Intenta hasta 5 líneas por si alguna falla
-        data = leer_datos()
-        if data:
+    try:
+        # 1. Lee la línea única de JSON
+        json_line = serialConnection.readline().decode('utf-8').strip()
+        
+        # 2. Si la línea no está vacía, la convierte de texto a diccionario
+        if json_line:
+            data = json.loads(json_line)
             return jsonify(data)
-    return jsonify({"error": "No se pudo leer datos válidos"}), 500
+        else:
+            return jsonify({"error": "No se recibieron datos"}), 500
+            
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # Captura errores si el JSON está mal formado o hay ruido en la línea
+        return jsonify({"error": "Error al decodificar los datos del serial"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/")
 def home():

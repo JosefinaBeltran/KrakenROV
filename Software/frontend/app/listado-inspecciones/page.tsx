@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, FileText, Calendar, MapPin, Filter, Edit, Trash2, ArrowUpDown } from "lucide-react"
+import { useDatabase } from "@/hooks/useDatabase"
 
 interface Inspeccion {
   id: string
@@ -21,10 +22,12 @@ interface Inspeccion {
   capturedFrames: string[]
   recordingTime: number
   createdAt: string
+  recordings?: string[]
 }
 
 export default function ListadoInspeccionesPage() {
   const router = useRouter()
+  const { getAllInspecciones, deleteInspeccion } = useDatabase()
   const [inspecciones, setInspecciones] = useState<Inspeccion[]>([])
   const [filteredInspecciones, setFilteredInspecciones] = useState<Inspeccion[]>([])
   const [sortBy, setSortBy] = useState<"nombre" | "fecha">("fecha")
@@ -37,29 +40,37 @@ export default function ListadoInspeccionesPage() {
   })
 
   useEffect(() => {
-    const data = localStorage.getItem("inspecciones")
-    if (data) {
-      const parsedData = JSON.parse(data)
-      setInspecciones(parsedData)
-      setFilteredInspecciones(parsedData)
+    const loadInspecciones = async () => {
+      console.log('Loading inspecciones from database...')
+      try {
+        const data = await getAllInspecciones()
+        console.log('Retrieved inspecciones from database:', data)
+        setInspecciones(data)
+        setFilteredInspecciones(data)
+      } catch (error) {
+        console.error('Error loading inspecciones:', error)
+        setInspecciones([])
+        setFilteredInspecciones([])
+      }
     }
-  }, [])
+    loadInspecciones()
+  }, [getAllInspecciones])
 
   useEffect(() => {
-    let filtered = inspecciones
+    let filtered = [...inspecciones]
 
     if (filters.fechaDesde) {
       filtered = filtered.filter((insp) => {
-        const inspDate = new Date(insp.fechaInspeccion)
-        const fromDate = new Date(filters.fechaDesde)
+        const inspDate = new Date(`${insp.fechaInspeccion}T00:00:00`)
+        const fromDate = new Date(`${filters.fechaDesde}T00:00:00`)
         return inspDate >= fromDate
       })
     }
 
     if (filters.fechaHasta) {
       filtered = filtered.filter((insp) => {
-        const inspDate = new Date(insp.fechaInspeccion)
-        const toDate = new Date(filters.fechaHasta)
+        const inspDate = new Date(`${insp.fechaInspeccion}T00:00:00`)
+        const toDate = new Date(`${filters.fechaHasta}T00:00:00`)
         return inspDate <= toDate
       })
     }
@@ -78,10 +89,11 @@ export default function ListadoInspeccionesPage() {
 
     filtered = filtered.sort((a, b) => {
       if (sortBy === "nombre") {
-        return a.nombreInspeccion.localeCompare(b.nombreInspeccion)
-      } else {
-        return new Date(b.fechaInspeccion).getTime() - new Date(a.fechaInspeccion).getTime()
+        return a.nombreInspeccion.localeCompare(b.nombreInspeccion, "es", { sensitivity: "base" })
       }
+      const aTime = new Date(`${a.fechaInspeccion}T00:00:00`).getTime()
+      const bTime = new Date(`${b.fechaInspeccion}T00:00:00`).getTime()
+      return (isNaN(bTime) ? 0 : bTime) - (isNaN(aTime) ? 0 : aTime)
     })
 
     setFilteredInspecciones(filtered)
@@ -105,7 +117,7 @@ export default function ListadoInspeccionesPage() {
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
+    const date = new Date(`${dateString}T00:00:00`)
     return date.toLocaleDateString("es-ES", {
       year: "numeric",
       month: "long",
@@ -122,12 +134,17 @@ export default function ListadoInspeccionesPage() {
     router.push(`/editar-inspeccion/${inspeccionId}`)
   }
 
-  const handleDeleteInspeccion = (e: React.MouseEvent, inspeccionId: string) => {
+  const handleDeleteInspeccion = async (e: React.MouseEvent, inspeccionId: string) => {
     e.stopPropagation()
     if (confirm("¿Está seguro de que desea eliminar esta inspección? Esta acción no se puede deshacer.")) {
-      const updatedInspecciones = inspecciones.filter((insp) => insp.id !== inspeccionId)
-      setInspecciones(updatedInspecciones)
-      localStorage.setItem("inspecciones", JSON.stringify(updatedInspecciones))
+      try {
+        await deleteInspeccion(inspeccionId)
+        const updatedInspecciones = inspecciones.filter((insp) => insp.id !== inspeccionId)
+        setInspecciones(updatedInspecciones)
+      } catch (error) {
+        console.error('Error deleting inspeccion:', error)
+        alert('Error al eliminar la inspección. Por favor, intente nuevamente.')
+      }
     }
   }
 
@@ -248,56 +265,71 @@ export default function ListadoInspeccionesPage() {
           </Card>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredInspecciones.map((inspeccion) => (
-              <Card
-                key={inspeccion.id}
-                className="cursor-pointer hover:bg-card/80 transition-colors"
-                onClick={() => handleInspeccionClick(inspeccion.id)}
-              >
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg line-clamp-2 flex-1 mr-2">{inspeccion.nombreInspeccion}</CardTitle>
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => handleEditInspeccion(e, inspeccion.id)}
-                        className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={(e) => handleDeleteInspeccion(e, inspeccion.id)}
-                        className="h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+            {filteredInspecciones.map((inspeccion) => {
+              const firstCapture = inspeccion.capturedFrames?.[0]
+              return (
+                <Card
+                  key={inspeccion.id}
+                  className="cursor-pointer hover:bg-card/80 transition-colors overflow-hidden relative"
+                  onClick={() => handleInspeccionClick(inspeccion.id)}
+                  style={{
+                    backgroundImage: firstCapture ? `url(${firstCapture})` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat'
+                  }}
+                >
+                  {/* Dark overlay for better text readability */}
+                  <div className="absolute inset-0 bg-black/60 z-0" />
+                  
+                  <CardHeader className="relative z-10">
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-lg line-clamp-2 flex-1 mr-2 text-white drop-shadow-lg">
+                        {inspeccion.nombreInspeccion}
+                      </CardTitle>
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => handleEditInspeccion(e, inspeccion.id)}
+                          className="h-8 w-8 p-0 hover:bg-white/20 text-white hover:text-white"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => handleDeleteInspeccion(e, inspeccion.id)}
+                          className="h-8 w-8 p-0 hover:bg-red-500/20 text-white hover:text-white"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="w-4 h-4" />
-                    <span className="line-clamp-1">{inspeccion.lugarInspeccion}</span>
-                  </div>
+                  </CardHeader>
+                  
+                  <CardContent className="space-y-3 relative z-10">
+                    <div className="flex items-center gap-2 text-sm text-white/90 drop-shadow-md">
+                      <MapPin className="w-4 h-4" />
+                      <span className="line-clamp-1">{inspeccion.lugarInspeccion}</span>
+                    </div>
 
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Calendar className="w-4 h-4" />
-                    <span>{formatDate(inspeccion.fechaInspeccion)}</span>
-                  </div>
+                    <div className="flex items-center gap-2 text-sm text-white/90 drop-shadow-md">
+                      <Calendar className="w-4 h-4" />
+                      <span>{formatDate(inspeccion.fechaInspeccion)}</span>
+                    </div>
 
-                  <div className="pt-2 border-t border-border">
-                    <p className="text-sm text-muted-foreground">Inspector: {inspeccion.nombreApellido}</p>
-                  </div>
+                    <div className="pt-2 border-t border-white/20">
+                      <p className="text-sm text-white/90 drop-shadow-md">Inspector: {inspeccion.nombreApellido}</p>
+                    </div>
 
-                  <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                    Ver Detalles
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                    <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
+                      Ver Detalles
+                    </Button>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>

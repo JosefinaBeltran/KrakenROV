@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,7 +19,10 @@ import {
   Clock,
   Youtube,
   Video,
+  FolderOpen,
 } from "lucide-react"
+import { useDatabase } from "@/hooks/useDatabase"
+import { VideoControls } from "@/components/VideoControls"
 
 interface Inspeccion {
   id: string
@@ -39,47 +42,230 @@ interface Inspeccion {
 export default function VisorVideoPage() {
   const router = useRouter()
   const params = useParams()
+  const { getInspeccionById, updateInspeccion } = useDatabase()
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
   const [youtubeLink, setYoutubeLink] = useState("")
   const [linkSaved, setLinkSaved] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedRecording, setSelectedRecording] = useState(0) // Added state for selected recording
+  const [isSeeking, setIsSeeking] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
+  const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null)
+  const [isVideoLoading, setIsVideoLoading] = useState(false)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const videoContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    const data = localStorage.getItem("inspecciones")
-    if (data) {
-      const inspecciones: Inspeccion[] = JSON.parse(data)
-      const found = inspecciones.find((i) => i.id === params.id)
-      if (found) {
-        setInspeccion(found)
-        setYoutubeLink(found.youtubeLink || "")
+    const loadInspeccion = async () => {
+      console.log('Loading inspeccion for video viewer, ID:', params.id)
+      try {
+        const found = await getInspeccionById(params.id as string)
+        console.log('Found inspeccion for video viewer:', found)
+        if (found) {
+          setInspeccion(found)
+          setYoutubeLink(found.youtubeLink || "")
+        }
+      } catch (error) {
+        console.error('Error loading inspeccion:', error)
+        // Fallback to localStorage
+        const data = localStorage.getItem("inspecciones")
+        if (data) {
+          const inspecciones: Inspeccion[] = JSON.parse(data)
+          const found = inspecciones.find((i) => i.id === params.id)
+          if (found) {
+            setInspeccion(found)
+            setYoutubeLink(found.youtubeLink || "")
+          }
+        }
       }
     }
-  }, [params.id])
+    
+    loadInspeccion()
+  }, [params.id, getInspeccionById])
 
-  // Simulate video playback
+  // Wire up HTML5 video events for real playback
   useEffect(() => {
-    let interval: NodeJS.Timeout
-    if (isPlaying && inspeccion) {
-      interval = setInterval(() => {
-        setCurrentTime((prev) => {
-          if (prev >= inspeccion.recordingTime) {
-            setIsPlaying(false)
-            return inspeccion.recordingTime
-          }
-          return prev + 1
-        })
-      }, 1000)
+    const video = videoRef.current
+    if (!video) return
+
+    const updateDuration = () => {
+      const videoDuration = video.duration
+      console.log('Checking video duration:', videoDuration, 'readyState:', video.readyState)
+      if (videoDuration && !isNaN(videoDuration) && isFinite(videoDuration) && videoDuration > 0) {
+        console.log('Setting duration to:', videoDuration)
+        setDuration(videoDuration)
+      } else {
+        console.log('Duration not valid yet')
+      }
     }
-    return () => clearInterval(interval)
-  }, [isPlaying, inspeccion])
+
+    const onLoaded = () => {
+      console.log('loadedmetadata event fired')
+      updateDuration()
+    }
+    
+    const onLoadedData = () => {
+      console.log('loadeddata event fired')
+      updateDuration()
+    }
+    
+    const onCanPlay = () => {
+      console.log('canplay event fired')
+      updateDuration()
+    }
+    
+    const onCanPlayThrough = () => {
+      console.log('canplaythrough event fired')
+      updateDuration()
+    }
+    
+    const onDurationChange = () => {
+      console.log('durationchange event fired')
+      updateDuration()
+    }
+    
+    const onTime = () => {
+      if (!isSeeking) {
+        setCurrentTime(video.currentTime || 0)
+      }
+    }
+    
+    const onEnd = () => setIsPlaying(false)
+
+    video.addEventListener("loadedmetadata", onLoaded)
+    video.addEventListener("loadeddata", onLoadedData)
+    video.addEventListener("canplay", onCanPlay)
+    video.addEventListener("canplaythrough", onCanPlayThrough)
+    video.addEventListener("durationchange", onDurationChange)
+    video.addEventListener("timeupdate", onTime)
+    video.addEventListener("ended", onEnd)
+    
+    // Try to get duration immediately if video is already loaded
+    if (video.readyState >= 1) {
+      console.log('Video already loaded, checking duration immediately')
+      updateDuration()
+    }
+    
+    return () => {
+      video.removeEventListener("loadedmetadata", onLoaded)
+      video.removeEventListener("loadeddata", onLoadedData)
+      video.removeEventListener("canplay", onCanPlay)
+      video.removeEventListener("canplaythrough", onCanPlayThrough)
+      video.removeEventListener("durationchange", onDurationChange)
+      video.removeEventListener("timeupdate", onTime)
+      video.removeEventListener("ended", onEnd)
+    }
+  }, [isSeeking])
+
+  // Convert base64 data URL to blob URL for better video handling
+  useEffect(() => {
+    let currentBlobUrl: string | null = null
+
+    const convertToBlob = async () => {
+      if (!inspeccion || !inspeccion.recordings || inspeccion.recordings.length === 0) {
+        setVideoBlobUrl(null)
+        setIsVideoLoading(false)
+        return
+      }
+
+      const currentDataUrl = inspeccion.recordings[selectedRecording]
+      if (!currentDataUrl) {
+        setVideoBlobUrl(null)
+        setIsVideoLoading(false)
+        return
+      }
+
+      try {
+        setIsVideoLoading(true)
+        console.log('Converting base64 to blob URL for recording:', selectedRecording)
+        // Fetch the data URL and convert to blob
+        const response = await fetch(currentDataUrl)
+        const blob = await response.blob()
+        currentBlobUrl = URL.createObjectURL(blob)
+        
+        console.log('Blob URL created successfully:', currentBlobUrl.substring(0, 50) + '...', 'Blob size:', blob.size, 'bytes')
+        setVideoBlobUrl(currentBlobUrl)
+      } catch (error) {
+        console.error('Error converting to blob URL:', error)
+        // Fallback to using data URL directly
+        setVideoBlobUrl(currentDataUrl)
+        setIsVideoLoading(false)
+      }
+    }
+
+    convertToBlob()
+
+    // Cleanup on unmount or when recording changes
+    return () => {
+      if (currentBlobUrl) {
+        console.log('Revoking blob URL:', currentBlobUrl.substring(0, 50) + '...')
+        URL.revokeObjectURL(currentBlobUrl)
+      }
+    }
+  }, [selectedRecording, inspeccion])
+
+  // Reset video when blob URL changes
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    
+    if (!videoBlobUrl) {
+      console.log('No video source available')
+      setDuration(0)
+      setCurrentTime(0)
+      setIsPlaying(false)
+      setIsVideoLoading(false)
+      return
+    }
+    
+    console.log('Video blob URL changed, resetting player')
+    video.pause()
+    video.currentTime = 0
+    setCurrentTime(0)
+    setIsPlaying(false)
+    setDuration(0)
+    
+    // Force video to reload with new source
+    video.load()
+    
+    // Add listeners to track loading progress
+    const checkDuration = () => {
+      console.log('Video metadata loaded, duration:', video.duration, 'readyState:', video.readyState)
+      if (video.duration && !isNaN(video.duration) && video.duration > 0) {
+        setDuration(video.duration)
+        setIsVideoLoading(false)
+      }
+    }
+    
+    const onCanPlay = () => {
+      console.log('Video can play, duration:', video.duration)
+      setIsVideoLoading(false)
+    }
+    
+    const onError = (e: Event) => {
+      console.error('Video loading error:', e)
+      setIsVideoLoading(false)
+    }
+    
+    video.addEventListener('loadedmetadata', checkDuration, { once: true })
+    video.addEventListener('canplay', onCanPlay, { once: true })
+    video.addEventListener('error', onError, { once: true })
+    
+    return () => {
+      video.removeEventListener('loadedmetadata', checkDuration)
+      video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('error', onError)
+    }
+  }, [videoBlobUrl])
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
+    const secs = Math.floor(seconds % 60)
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
   }
 
@@ -98,34 +284,197 @@ export default function VisorVideoPage() {
   }
 
   const handlePlayPause = () => {
-    setIsPlaying(!isPlaying)
+    const video = videoRef.current
+    if (!video) return
+    if (isPlaying) {
+      video.pause()
+      setIsPlaying(false)
+    } else {
+      void video.play()
+      setIsPlaying(true)
+    }
   }
 
   const handleMuteToggle = () => {
     setIsMuted(!isMuted)
   }
 
-  const handleSaveYoutubeLink = () => {
-    if (!inspeccion || !youtubeLink.trim()) return
+  const handleSeekKeyboard = (direction: 'forward' | 'backward') => {
+    const video = videoRef.current
+    if (!video) return
+    
+    const seekAmount = 10 // 10 seconds
+    const newTime = direction === 'forward' 
+      ? Math.min(video.currentTime + seekAmount, duration)
+      : Math.max(video.currentTime - seekAmount, 0)
+    
+    video.currentTime = newTime
+    setCurrentTime(newTime)
+  }
 
-    const data = localStorage.getItem("inspecciones")
-    if (data) {
-      const inspecciones: Inspeccion[] = JSON.parse(data)
-      const updatedInspecciones = inspecciones.map((i) =>
-        i.id === inspeccion.id ? { ...i, youtubeLink: youtubeLink.trim() } : i,
-      )
-      localStorage.setItem("inspecciones", JSON.stringify(updatedInspecciones))
-      setInspeccion({ ...inspeccion, youtubeLink: youtubeLink.trim() })
-      setLinkSaved(true)
-      setIsDialogOpen(false)
-      setTimeout(() => setLinkSaved(false), 3000)
+  const handleVolumeChange = (direction: 'up' | 'down') => {
+    const video = videoRef.current
+    if (!video) return
+    
+    const volumeChange = 0.1
+    const newVolume = direction === 'up' 
+      ? Math.min((video.volume || 0) + volumeChange, 1)
+      : Math.max((video.volume || 0) - volumeChange, 0)
+    
+    video.volume = newVolume
+    if (newVolume === 0) {
+      setIsMuted(true)
+    } else if (isMuted) {
+      setIsMuted(false)
     }
   }
 
-  const handleFullscreen = () => {
-    // In a real app, this would enter fullscreen mode
-    alert("Modo pantalla completa - En desarrollo")
+  const handleSaveYoutubeLink = async () => {
+    if (!inspeccion || !youtubeLink.trim()) return
+
+    try {
+      const updatedInspeccion = {
+        ...inspeccion,
+        youtubeLink: youtubeLink.trim()
+      }
+      await updateInspeccion(updatedInspeccion)
+      setInspeccion(updatedInspeccion)
+      setLinkSaved(true)
+      setIsDialogOpen(false)
+      setTimeout(() => setLinkSaved(false), 3000)
+    } catch (error) {
+      console.error('Error saving youtube link:', error)
+      // Fallback to localStorage
+      const data = localStorage.getItem("inspecciones")
+      if (data) {
+        const inspecciones: Inspeccion[] = JSON.parse(data)
+        const updatedInspecciones = inspecciones.map((i) =>
+          i.id === inspeccion.id ? { ...i, youtubeLink: youtubeLink.trim() } : i,
+        )
+        localStorage.setItem("inspecciones", JSON.stringify(updatedInspecciones))
+        setInspeccion({ ...inspeccion, youtubeLink: youtubeLink.trim() })
+        setLinkSaved(true)
+        setIsDialogOpen(false)
+        setTimeout(() => setLinkSaved(false), 3000)
+      }
+    }
   }
+
+  const handleOpenFileExplorer = async () => {
+    if (!inspeccion || !inspeccion.recordings || inspeccion.recordings.length === 0) {
+      alert("No hay grabaciones disponibles para descargar")
+      return
+    }
+
+    // Get the selected recording
+    const selectedVideoData = inspeccion.recordings[selectedRecording]
+    if (!selectedVideoData) {
+      alert("No hay video seleccionado")
+      return
+    }
+
+    try {
+      // Convert base64 to blob
+      const response = await fetch(selectedVideoData)
+      const blob = await response.blob()
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `inspeccion_${inspeccion.nombreInspeccion.replace(/\s+/g, '_')}_${selectedRecording + 1}.webm`
+      
+      // Trigger download
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      // Clean up
+      window.URL.revokeObjectURL(url)
+      
+      alert("Video descargado exitosamente. Puedes encontrarlo en tu carpeta de Descargas.")
+    } catch (error) {
+      console.error('Error downloading video:', error)
+      alert("Error al descargar el video. Por favor, inténtalo nuevamente.")
+    }
+  }
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const video = videoRef.current
+    if (!video || !duration) return
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width)) // Clamp between 0 and 1
+    const newTime = percentage * duration
+    
+    video.currentTime = newTime
+    setCurrentTime(newTime)
+  }
+
+  const handleSeekStart = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const video = videoRef.current
+    if (!video || !duration) {
+      console.log('Cannot seek - video or duration not available', { video: !!video, duration })
+      return
+    }
+
+    setIsSeeking(true)
+    handleSeek(e)
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const video = videoRef.current
+      const target = e.currentTarget
+      if (!video || !duration || !target) return
+
+      const rect = target.getBoundingClientRect()
+      const clickX = moveEvent.clientX - rect.left
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width))
+      const newTime = percentage * duration
+      
+      video.currentTime = newTime
+      setCurrentTime(newTime)
+    }
+
+    const handleMouseUp = () => {
+      setIsSeeking(false)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
+
+  const handleFullscreen = async () => {
+    const container = videoContainerRef.current
+    if (!container) return
+
+    try {
+      if (!document.fullscreenElement) {
+        await container.requestFullscreen()
+        setIsFullscreen(true)
+      } else {
+        await document.exitFullscreen()
+        setIsFullscreen(false)
+      }
+    } catch (error) {
+      console.error('Error toggling fullscreen:', error)
+    }
+  }
+
+  // Handle fullscreen change events
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
 
   if (!inspeccion) {
     return (
@@ -146,11 +495,23 @@ export default function VisorVideoPage() {
     )
   }
 
-  const progressPercentage = inspeccion.recordingTime > 0 ? (currentTime / inspeccion.recordingTime) * 100 : 0
-  const totalRecordings = inspeccion.recordings?.length || 1 // Calculate total recordings
+  const totalRecordings = inspeccion.recordings?.length || 0
+  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
     <div className="min-h-screen bg-background p-4">
+      <VideoControls
+        onPlayPause={handlePlayPause}
+        onSeek={handleSeekKeyboard}
+        onVolumeChange={handleVolumeChange}
+        onToggleMute={handleMuteToggle}
+        onToggleFullscreen={handleFullscreen}
+        onToggleFullscreenExit={() => {
+          if (document.fullscreenElement) {
+            document.exitFullscreen()
+          }
+        }}
+      />
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <Button
@@ -194,34 +555,45 @@ export default function VisorVideoPage() {
               </CardHeader>
               <CardContent className="p-0">
                 {/* Video area */}
-                <div className="relative bg-muted aspect-video flex items-center justify-center">
-                  {/* Simulated video content */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center mb-4 mx-auto">
-                        <Play className="w-12 h-12 text-primary" />
+                <div 
+                  ref={videoContainerRef}
+                  className="relative bg-muted aspect-video flex items-center justify-center"
+                >
+                  {videoBlobUrl ? (
+                    <video
+                      key={videoBlobUrl}
+                      ref={videoRef}
+                      src={videoBlobUrl}
+                      controls={false}
+                      muted={isMuted}
+                      className="w-full h-full object-contain bg-black"
+                      preload="auto"
+                      playsInline
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center mb-4 mx-auto">
+                          <Video className="w-12 h-12 text-primary" />
+                        </div>
+                        <p className="text-white text-lg font-semibold">Sin grabaciones</p>
+                        <p className="text-white/70 text-sm mt-2">{inspeccion.lugarInspeccion}</p>
                       </div>
-                      <p className="text-white text-lg font-semibold">
-                        {totalRecordings > 1 ? `Grabación ${selectedRecording + 1}` : "Video de Inspección"}
-                      </p>
-                      <p className="text-white/70 text-sm mt-2">{inspeccion.lugarInspeccion}</p>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Video overlay when playing */}
-                  {isPlaying && (
-                    <div className="absolute inset-0 bg-black/20">
-                      <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-2 rounded text-sm">
-                        {formatDateTime(inspeccion.createdAt)}
-                      </div>
-                      <div className="absolute bottom-20 left-4 bg-black/70 text-white px-3 py-2 rounded text-sm">
-                        {formatTime(currentTime)} / {formatTime(inspeccion.recordingTime)}
+                  {/* Loading indicator */}
+                  {isVideoLoading && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-2"></div>
+                        <p className="text-white text-sm">Cargando video...</p>
                       </div>
                     </div>
                   )}
 
                   {/* Play button overlay */}
-                  {!isPlaying && (
+                  {videoBlobUrl && !isPlaying && !isVideoLoading && (
                     <Button
                       onClick={handlePlayPause}
                       size="lg"
@@ -234,13 +606,27 @@ export default function VisorVideoPage() {
 
                 {/* Video controls */}
                 <div className="p-4 bg-card border-t border-border">
-                  {/* Progress bar */}
+                  {/* Interactive Progress bar */}
                   <div className="mb-4">
-                    <div className="w-full bg-muted rounded-full h-2">
+                    <div 
+                      className="relative w-full bg-muted/60 rounded-full h-2 cursor-pointer hover:h-2.5 transition-all duration-200 group"
+                      onMouseDown={handleSeekStart}
+                      title={`${formatTime(currentTime)} / ${formatTime(duration)}`}
+                    >
                       <div
-                        className="bg-primary h-2 rounded-full transition-all duration-300"
+                        className="bg-primary h-full rounded-full transition-all duration-100 pointer-events-none"
                         style={{ width: `${progressPercentage}%` }}
                       />
+                      {/* Seek indicator */}
+                      <div 
+                        className="absolute top-1/2 transform -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 border-2 border-background shadow-lg pointer-events-none"
+                        style={{ left: `${progressPercentage}%`, marginLeft: '-6px' }}
+                      />
+                    </div>
+                    {/* Time display */}
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2 font-medium">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{formatTime(duration)}</span>
                     </div>
                   </div>
 
@@ -253,13 +639,26 @@ export default function VisorVideoPage() {
                       <Button variant="ghost" size="sm" onClick={handleMuteToggle}>
                         {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                       </Button>
-                      <span className="text-sm text-muted-foreground ml-2">
-                        {formatTime(currentTime)} / {formatTime(inspeccion.recordingTime)}
-                      </span>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={handleFullscreen}>
-                      <Maximize className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setShowKeyboardShortcuts(!showKeyboardShortcuts)}
+                        className="text-xs"
+                      >
+                        ⌨️
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleFullscreen}>
+                        {isFullscreen ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.5 3.5M15 9h4.5M15 9V4.5M15 9l5.5-5.5M9 15v4.5M9 15H4.5M9 15l-5.5 5.5M15 15h4.5M15 15v4.5m0-4.5l5.5 5.5" />
+                          </svg>
+                        ) : (
+                          <Maximize className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -335,84 +734,108 @@ export default function VisorVideoPage() {
                         {inspeccion.youtubeLink}
                       </a>
                     </div>
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" className="w-full border-border hover:bg-secondary bg-transparent">
-                          <Youtube className="w-4 h-4 mr-2" />
-                          Actualizar Enlace
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Actualizar Enlace de YouTube</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <Input
-                            value={youtubeLink}
-                            onChange={(e) => setYoutubeLink(e.target.value)}
-                            placeholder="https://www.youtube.com/watch?v=..."
-                            className="bg-secondary border-border"
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={handleSaveYoutubeLink}
-                              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
-                            >
-                              Guardar
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => setIsDialogOpen(false)}
-                              className="border-border hover:bg-secondary bg-transparent"
-                            >
-                              Cancelar
-                            </Button>
+                    <div className="flex gap-2 flex-wrap">
+                      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="flex-1 min-w-0 border-border hover:bg-secondary bg-transparent">
+                            <Youtube className="w-4 h-4 mr-2 shrink-0" />
+                            <span className="truncate">Actualizar Enlace</span>
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Actualizar Enlace de YouTube</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <Input
+                              value={youtubeLink}
+                              onChange={(e) => setYoutubeLink(e.target.value)}
+                              placeholder="https://www.youtube.com/watch?v=..."
+                              className="bg-secondary border-border"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={handleSaveYoutubeLink}
+                                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              >
+                                Guardar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => setIsDialogOpen(false)}
+                                className="border-border hover:bg-secondary bg-transparent"
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                        </DialogContent>
+                      </Dialog>
+                      <Button
+                        onClick={handleOpenFileExplorer}
+                        disabled={!inspeccion.recordings || inspeccion.recordings.length === 0}
+                        variant="outline"
+                        className="flex-1 min-w-0 border-border hover:bg-secondary bg-transparent"
+                      >
+                        <FolderOpen className="w-4 h-4 mr-2 shrink-0" />
+                        <span className="truncate">Descargar Video</span>
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      No hay enlace de YouTube guardado para esta inspección.
+                      {inspeccion.recordings && inspeccion.recordings.length > 0
+                        ? "Sube automáticamente una grabación a YouTube o agrega un enlace manualmente."
+                        : "No hay grabaciones disponibles para subir. Agrega un enlace manualmente."}
                     </p>
-                    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                          <Youtube className="w-4 h-4 mr-2" />
-                          Agregar Enlace de YouTube
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Agregar Enlace de YouTube</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <Input
-                            value={youtubeLink}
-                            onChange={(e) => setYoutubeLink(e.target.value)}
-                            placeholder="https://www.youtube.com/watch?v=..."
-                            className="bg-secondary border-border"
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={handleSaveYoutubeLink}
-                              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
-                            >
-                              Guardar
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => setIsDialogOpen(false)}
-                              className="border-border hover:bg-secondary bg-transparent"
-                            >
-                              Cancelar
-                            </Button>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        onClick={handleOpenFileExplorer}
+                        disabled={!inspeccion.recordings || inspeccion.recordings.length === 0}
+                        variant="outline"
+                        className="flex-1 min-w-0 border-border hover:bg-secondary bg-transparent"
+                      >
+                        <FolderOpen className="w-4 h-4 mr-2 shrink-0" />
+                        <span className="truncate">Descargar Video</span>
+                      </Button>
+                      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="flex-1 min-w-0 border-border hover:bg-secondary bg-transparent">
+                            <Youtube className="w-4 h-4 mr-2 shrink-0" />
+                            <span className="truncate">Agregar Enlace</span>
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Agregar Enlace de YouTube</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <Input
+                              value={youtubeLink}
+                              onChange={(e) => setYoutubeLink(e.target.value)}
+                              placeholder="https://www.youtube.com/watch?v=..."
+                              className="bg-secondary border-border"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={handleSaveYoutubeLink}
+                                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              >
+                                Guardar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => setIsDialogOpen(false)}
+                                className="border-border hover:bg-secondary bg-transparent"
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   </div>
                 )}
 
@@ -426,6 +849,47 @@ export default function VisorVideoPage() {
             </Card>
           </div>
         </div>
+
+        {/* Keyboard shortcuts modal */}
+        {showKeyboardShortcuts && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-card border border-border rounded-lg p-6 max-w-md mx-4">
+              <h3 className="text-lg font-semibold mb-4">Atajos de Teclado</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Espacio</span>
+                  <span className="text-muted-foreground">Reproducir/Pausar</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>← →</span>
+                  <span className="text-muted-foreground">Retroceder/Avanzar 10s</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>↑ ↓</span>
+                  <span className="text-muted-foreground">Subir/Bajar volumen</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>F</span>
+                  <span className="text-muted-foreground">Pantalla completa</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>M</span>
+                  <span className="text-muted-foreground">Silenciar/Activar</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Esc</span>
+                  <span className="text-muted-foreground">Salir pantalla completa</span>
+                </div>
+              </div>
+              <Button 
+                onClick={() => setShowKeyboardShortcuts(false)}
+                className="w-full mt-4"
+              >
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

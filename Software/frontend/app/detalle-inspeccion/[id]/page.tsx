@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Images, FileText, Video, Calendar, MapPin, User, FileCheck } from "lucide-react"
+import { useDatabase } from "@/hooks/useDatabase"
 
 interface Inspeccion {
   id: string
@@ -16,24 +17,50 @@ interface Inspeccion {
   matricula: string
   capturedFrames: string[]
   recordingTime: number
+  recordings?: string[]
   createdAt: string
 }
 
 export default function DetalleInspeccionPage() {
   const router = useRouter()
   const params = useParams()
+  const { getInspeccionById } = useDatabase()
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
 
   useEffect(() => {
-    const data = localStorage.getItem("inspecciones")
-    if (data) {
-      const inspecciones: Inspeccion[] = JSON.parse(data)
-      const found = inspecciones.find((i) => i.id === params.id)
-      setInspeccion(found || null)
+    const loadInspeccion = async () => {
+      console.log('Loading inspeccion details for ID:', params.id)
+      try {
+        const found = await getInspeccionById(params.id as string)
+        console.log('Found inspeccion in database:', found)
+        setInspeccion(found || null)
+      } catch (error) {
+        console.error('Error loading inspeccion:', error)
+        // Fallback to localStorage
+        const data = localStorage.getItem("inspecciones")
+        if (data) {
+          const inspecciones: Inspeccion[] = JSON.parse(data)
+          const found = inspecciones.find((i) => i.id === params.id)
+          console.log('Found inspeccion in localStorage:', found)
+          setInspeccion(found || null)
+        }
+      }
     }
-  }, [params.id])
+    loadInspeccion()
+  }, [params.id, getInspeccionById])
 
   const formatDate = (dateString: string) => {
+    // Si la fecha viene en formato YYYY-MM-DD, parsearla correctamente sin conversión de zona horaria
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-').map(Number)
+      const date = new Date(year, month - 1, day) // month - 1 porque Date usa 0-indexed months
+      return date.toLocaleDateString("es-ES", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    }
+    // Para otros formatos, usar el método original
     const date = new Date(dateString)
     return date.toLocaleDateString("es-ES", {
       year: "numeric",
@@ -117,7 +144,7 @@ export default function DetalleInspeccionPage() {
               <div className="flex items-center gap-3">
                 <Video className="w-5 h-5 text-primary" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Duración de grabación</p>
+                  <p className="text-sm text-muted-foreground">Duración de la inspección</p>
                   <p className="font-medium">{formatTime(inspeccion.recordingTime)}</p>
                 </div>
               </div>
@@ -182,17 +209,19 @@ export default function DetalleInspeccionPage() {
               <div className="mx-auto w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-3">
                 <Video className="w-6 h-6 text-primary-foreground" />
               </div>
-              <CardTitle className="text-lg">Link del Video</CardTitle>
+              <CardTitle className="text-lg">Video(s)</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground text-center mb-4">
-                Acceder al video completo de la inspección
+                {inspeccion.recordings && inspeccion.recordings.length > 0
+                  ? `Ver ${inspeccion.recordings.length} grabación(es) guardadas`
+                  : "Sin grabaciones locales, puedes agregar un enlace externo"}
               </p>
               <Button
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                 onClick={() => router.push(`/visor-video/${inspeccion.id}`)}
               >
-                Ver Video
+                {inspeccion.recordings && inspeccion.recordings.length > 1 ? "Ver Grabaciones" : "Ver Video"}
               </Button>
             </CardContent>
           </Card>

@@ -8,13 +8,24 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, RotateCcw, ArrowRight } from "lucide-react"
+import { useDatabase } from "@/hooks/useDatabase"
 
 export default function FormularioInspeccionPage() {
   const router = useRouter()
+  const { saveTempInspeccionData } = useDatabase()
+  // Función para obtener la fecha local en formato YYYY-MM-DD sin problemas de zona horaria
+  const getLocalDateString = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   const [formData, setFormData] = useState({
     nombreInspeccion: "",
     lugarInspeccion: "",
-    fechaInspeccion: "",
+    fechaInspeccion: getLocalDateString(), // Fecha actual en formato YYYY-MM-DD usando zona horaria local
     descripcion: "",
     nombreApellido: "",
     matricula: "",
@@ -38,9 +49,7 @@ export default function FormularioInspeccionPage() {
     if (!formData.lugarInspeccion.trim()) {
       newErrors.lugarInspeccion = "El lugar de la inspección es requerido"
     }
-    if (!formData.fechaInspeccion) {
-      newErrors.fechaInspeccion = "La fecha de la inspección es requerida"
-    }
+    // No need to validate fecha since it's always set to current date
     if (!formData.descripcion.trim()) {
       newErrors.descripcion = "La descripción es requerida"
     }
@@ -59,7 +68,7 @@ export default function FormularioInspeccionPage() {
     setFormData({
       nombreInspeccion: "",
       lugarInspeccion: "",
-      fechaInspeccion: "",
+      fechaInspeccion: getLocalDateString(), // Mantener fecha actual al limpiar usando zona horaria local
       descripcion: "",
       nombreApellido: "",
       matricula: "",
@@ -67,11 +76,21 @@ export default function FormularioInspeccionPage() {
     setErrors({})
   }
 
-  const handleSiguiente = () => {
+  const handleSiguiente = async () => {
     if (validateForm()) {
-      // Store form data in localStorage for the video recording screen
-      localStorage.setItem("inspeccionData", JSON.stringify(formData))
-      router.push("/video-en-curso")
+      // Always use current date when saving
+      const normalized = {
+        ...formData,
+        fechaInspeccion: getLocalDateString(), // Ensure we always use current date
+      }
+      // Store form data in database for the video recording screen
+      try {
+        await saveTempInspeccionData(normalized)
+        router.push("/video-en-curso")
+      } catch (error) {
+        console.error('Error saving form data:', error)
+        alert('Error al guardar los datos del formulario. Por favor, intente nuevamente.')
+      }
     }
   }
 
@@ -127,10 +146,10 @@ export default function FormularioInspeccionPage() {
                   id="fechaInspeccion"
                   type="date"
                   value={formData.fechaInspeccion}
-                  onChange={(e) => handleInputChange("fechaInspeccion", e.target.value)}
-                  className="bg-input border-border"
+                  disabled
+                  className="bg-muted border-border cursor-not-allowed opacity-70"
                 />
-                {errors.fechaInspeccion && <p className="text-destructive text-sm">{errors.fechaInspeccion}</p>}
+                <p className="text-xs text-muted-foreground">La fecha se establece automáticamente al día actual</p>
               </div>
 
               <div className="space-y-2">

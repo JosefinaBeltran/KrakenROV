@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { ArrowLeft, Calendar, MapPin, User, ZoomIn } from "lucide-react"
+import { useDatabase } from "@/hooks/useDatabase"
 
 interface Inspeccion {
   id: string
@@ -23,18 +24,31 @@ interface Inspeccion {
 export default function GaleriaCapturas() {
   const router = useRouter()
   const params = useParams()
+  const { getInspeccionById } = useDatabase()
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
 
   useEffect(() => {
-    const data = localStorage.getItem("inspecciones")
-    if (data) {
-      const inspecciones: Inspeccion[] = JSON.parse(data)
-      const found = inspecciones.find((i) => i.id === params.id)
-      setInspeccion(found || null)
+    const loadInspeccion = async () => {
+      console.log('Loading inspeccion for gallery, ID:', params.id)
+      try {
+        const found = await getInspeccionById(params.id as string)
+        console.log('Found inspeccion for gallery:', found)
+        setInspeccion(found || null)
+      } catch (error) {
+        console.error('Error loading inspeccion:', error)
+        // Fallback to localStorage
+        const data = localStorage.getItem("inspecciones")
+        if (data) {
+          const inspecciones: Inspeccion[] = JSON.parse(data)
+          const found = inspecciones.find((i) => i.id === params.id)
+          setInspeccion(found || null)
+        }
+      }
     }
-  }, [params.id])
+    loadInspeccion()
+  }, [params.id, getInspeccionById])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -135,12 +149,13 @@ export default function GaleriaCapturas() {
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+            <CardTitle className="flex items-center justify-between">
                 <span>Capturas de la Inspección</span>
                 <span className="text-sm font-normal text-muted-foreground">
-                  {inspeccion.capturedFrames.length} imagen{inspeccion.capturedFrames.length !== 1 ? "es" : ""}
+                  {inspeccion.capturedFrames.length}{" "}
+                  {inspeccion.capturedFrames.length === 1 ? "imagen" : "imágenes"}
                 </span>
-              </CardTitle>
+            </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">

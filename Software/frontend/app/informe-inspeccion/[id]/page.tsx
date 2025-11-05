@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Calendar, MapPin, FileCheck, Upload, ImageIcon, Printer as Print, Download } from "lucide-react"
+import { useDatabase } from "@/hooks/useDatabase"
+import SensorCharts from "@/components/SensorCharts"
 
 interface Inspeccion {
   id: string
@@ -22,38 +24,70 @@ interface Inspeccion {
   createdAt: string
   observaciones?: string
   reportImages?: string[]
+  sensorCharts?: {
+    temperature: string
+    depth: string
+  }
 }
 
 export default function InformeInspeccionPage() {
   const router = useRouter()
   const params = useParams()
+  const { getInspeccionById, updateInspeccion } = useDatabase()
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
   const [observaciones, setObservaciones] = useState("")
   const [reportImages, setReportImages] = useState<string[]>([])
 
   useEffect(() => {
-    const data = localStorage.getItem("inspecciones")
-    if (data) {
-      const inspecciones: Inspeccion[] = JSON.parse(data)
-      const found = inspecciones.find((i) => i.id === params.id)
-      if (found) {
-        setInspeccion(found)
-        setObservaciones(found.observaciones || "")
-        setReportImages(found.reportImages || [])
+    const loadInspeccion = async () => {
+      console.log('Loading inspeccion for informe, ID:', params.id)
+      try {
+        const found = await getInspeccionById(params.id as string)
+        console.log('Found inspeccion for informe:', found)
+        if (found) {
+          setInspeccion(found)
+          setObservaciones(found.observaciones || "")
+          setReportImages(found.reportImages || [])
+        }
+      } catch (error) {
+        console.error('Error loading inspeccion:', error)
+        // Fallback to localStorage
+        const data = localStorage.getItem("inspecciones")
+        if (data) {
+          const inspecciones: Inspeccion[] = JSON.parse(data)
+          const found = inspecciones.find((i) => i.id === params.id)
+          if (found) {
+            setInspeccion(found)
+            setObservaciones(found.observaciones || "")
+            setReportImages(found.reportImages || [])
+          }
+        }
       }
     }
-  }, [params.id])
+    loadInspeccion()
+  }, [params.id, getInspeccionById])
 
-  const saveObservaciones = () => {
+  const saveObservaciones = async () => {
     if (!inspeccion) return
 
-    const data = localStorage.getItem("inspecciones")
-    if (data) {
-      const inspecciones: Inspeccion[] = JSON.parse(data)
-      const updatedInspecciones = inspecciones.map((i) =>
-        i.id === inspeccion.id ? { ...i, observaciones, reportImages } : i,
-      )
-      localStorage.setItem("inspecciones", JSON.stringify(updatedInspecciones))
+    try {
+      const updatedInspeccion = {
+        ...inspeccion,
+        observaciones,
+        reportImages
+      }
+      await updateInspeccion(updatedInspeccion)
+    } catch (error) {
+      console.error('Error saving observaciones:', error)
+      // Fallback to localStorage
+      const data = localStorage.getItem("inspecciones")
+      if (data) {
+        const inspecciones: Inspeccion[] = JSON.parse(data)
+        const updatedInspecciones = inspecciones.map((i) =>
+          i.id === inspeccion.id ? { ...i, observaciones, reportImages } : i,
+        )
+        localStorage.setItem("inspecciones", JSON.stringify(updatedInspecciones))
+      }
     }
   }
 
@@ -431,6 +465,15 @@ export default function InformeInspeccionPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Sensor Data Charts */}
+            {inspeccion.sensorCharts && (
+              <div className="border-t border-border pt-6">
+                <SensorCharts 
+                  sensorCharts={inspeccion.sensorCharts}
+                />
               </div>
             )}
 
