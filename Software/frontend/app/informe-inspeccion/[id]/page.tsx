@@ -7,7 +7,7 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Calendar, MapPin, FileCheck, Upload, ImageIcon, Printer as Print, Download } from "lucide-react"
+import { ArrowLeft, Calendar, MapPin, FileCheck, Upload, ImageIcon, Printer as Print } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import SensorCharts from "@/components/SensorCharts"
 
@@ -131,177 +131,6 @@ export default function InformeInspeccionPage() {
   const handleImprimirInforme = () => {
     saveObservaciones()
     window.print()
-  }
-
-  const handleGenerarPDF = async () => {
-    saveObservaciones()
-    
-    try {
-      // Verificar que las librerías estén disponibles
-      if (typeof window === 'undefined') {
-        alert('La generación de PDF no está disponible en este entorno.')
-        return
-      }
-
-      // Importar las librerías dinámicamente
-      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-        import('jspdf'),
-        import('html2canvas')
-      ])
-      
-      // Obtener el elemento del informe
-      const element = document.getElementById('informe-content')
-      if (!element) {
-        alert('No se pudo encontrar el contenido del informe.')
-        return
-      }
-      
-      // Mostrar mensaje de carga
-      const loadingMessage = document.createElement('div')
-      loadingMessage.textContent = 'Generando PDF...'
-      loadingMessage.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: #162831;
-        color: #c5cac7;
-        padding: 20px;
-        border-radius: 8px;
-        z-index: 9999;
-        font-family: Arial, sans-serif;
-      `
-      document.body.appendChild(loadingMessage)
-      
-      // Crear estilos temporales más completos para PDF
-      const tempStyles = document.createElement('style')
-      tempStyles.id = 'pdf-styles'
-      tempStyles.textContent = `
-        * {
-          --background: #ffffff !important;
-          --foreground: #333333 !important;
-          --card: #ffffff !important;
-          --card-foreground: #333333 !important;
-          --popover: #ffffff !important;
-          --popover-foreground: #333333 !important;
-          --primary: #1a365d !important;
-          --primary-foreground: #ffffff !important;
-          --secondary: #f5f5f5 !important;
-          --secondary-foreground: #333333 !important;
-          --muted: #f5f5f5 !important;
-          --muted-foreground: #666666 !important;
-          --accent: #e2e8f0 !important;
-          --accent-foreground: #333333 !important;
-          --destructive: #dc2626 !important;
-          --destructive-foreground: #ffffff !important;
-          --border: #cccccc !important;
-          --input: #ffffff !important;
-          --ring: #1a365d !important;
-        }
-        
-        #informe-content {
-          background: white !important;
-          color: #333 !important;
-        }
-        
-        #informe-content * {
-          background: white !important;
-          color: #333 !important;
-          border-color: #ccc !important;
-        }
-        
-        #informe-content .text-primary,
-        #informe-content h1,
-        #informe-content h2,
-        #informe-content h3,
-        #informe-content .font-bold {
-          color: #1a365d !important;
-        }
-        
-        #informe-content .text-muted-foreground {
-          color: #666 !important;
-        }
-        
-        #informe-content .bg-muted {
-          background: #f5f5f5 !important;
-        }
-        
-        #informe-content .border-border {
-          border-color: #ccc !important;
-        }
-        
-        #informe-content .bg-primary {
-          background: #1a365d !important;
-          color: white !important;
-        }
-      `
-      document.head.appendChild(tempStyles)
-      
-      // Esperar un momento para que los estilos se apliquen
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
-      // Crear canvas del contenido
-      const canvas = await html2canvas(element, {
-        scale: 3,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: element.scrollWidth,
-        height: element.scrollHeight,
-        ignoreElements: (element) => {
-          // Ignorar elementos que pueden causar problemas
-          return element.classList.contains('print:hidden')
-        }
-      })
-      
-      // Remover estilos temporales
-      const existingStyles = document.getElementById('pdf-styles')
-      if (existingStyles) {
-        document.head.removeChild(existingStyles)
-      }
-      
-      // Remover mensaje de carga
-      document.body.removeChild(loadingMessage)
-      
-      // Crear PDF
-      const imgData = canvas.toDataURL('image/png', 0.95)
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      
-      const pdfWidth = 210
-      const pdfHeight = 297
-      const imgWidth = pdfWidth - 20 // Margen de 10mm cada lado
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      
-      // Calcular si necesita múltiples páginas
-      if (imgHeight <= pdfHeight - 20) {
-        // Una sola página
-        pdf.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight)
-      } else {
-        // Múltiples páginas
-        let heightLeft = imgHeight
-        let position = 10
-        
-        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight)
-        heightLeft -= (pdfHeight - 20)
-        
-        while (heightLeft >= 0) {
-          position = heightLeft - imgHeight + 10
-          pdf.addPage()
-          pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight)
-          heightLeft -= (pdfHeight - 20)
-        }
-      }
-      
-      // Descargar el PDF
-      const fileName = `Informe_${inspeccion?.nombreInspeccion.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
-      pdf.save(fileName)
-      
-    } catch (error) {
-      console.error('Error al generar PDF:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
-      alert(`Error al generar el PDF: ${errorMessage}`)
-    }
   }
 
   if (!inspeccion) {
@@ -522,14 +351,6 @@ export default function InformeInspeccionPage() {
           >
             <Print className="w-4 h-4 mr-2" />
             Imprimir
-          </Button>
-
-          <Button
-            onClick={handleGenerarPDF}
-            className="btn-primary"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Descargar PDF
           </Button>
         </div>
       </div>
