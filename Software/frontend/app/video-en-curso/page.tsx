@@ -9,6 +9,16 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { useDatabase } from "@/hooks/useDatabase"
 import ChartCapture from "@/components/ChartCapture"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface InspeccionData {
   nombreInspeccion: string
@@ -71,6 +81,12 @@ export default function VideoEnCursoPage() {
   const [measurementText, setMeasurementText] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showFinalizeDialog, setShowFinalizeDialog] = useState(false)
+  const [isStoppingRecording, setIsStoppingRecording] = useState(false)
+  const [showDeleteFrameDialog, setShowDeleteFrameDialog] = useState(false)
+  const [showDeleteRecordingDialog, setShowDeleteRecordingDialog] = useState(false)
+  const [frameToDelete, setFrameToDelete] = useState<number | null>(null)
+  const [recordingToDelete, setRecordingToDelete] = useState<number | null>(null)
 
   // Estado para el gráfico de altitud (perfil de inmersión)
   const [altitudeHistory, setAltitudeHistory] = useState<number[]>([])
@@ -99,6 +115,8 @@ export default function VideoEnCursoPage() {
   const recordedChunksRef = useRef<Blob[]>([])
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const chartCaptureRef = useRef<{ captureCharts: () => void }>(null)
+  const stopRecordingResolverRef = useRef<(() => void) | null>(null)
+  const latestRecordingRef = useRef<string | null>(null)
 
   // Initialize inspection start time
   useEffect(() => {
@@ -343,9 +361,25 @@ export default function VideoEnCursoPage() {
   const handleGrabar = () => {
     // Stop recording
     if (isRecording) {
-      setIsRecording(false)
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop()
+        // Solicitar los datos finales antes de detener para asegurar que se capture todo
+        try {
+          if (mediaRecorderRef.current.state === "recording") {
+            mediaRecorderRef.current.requestData()
+          }
+        } catch (e) {
+          console.log('Error requesting data:', e)
+        }
+        
+        // Pequeño delay para asegurar que los datos se capturen
+        setTimeout(() => {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+            mediaRecorderRef.current.stop()
+          }
+          setIsRecording(false)
+        }, 100)
+      } else {
+        setIsRecording(false)
       }
       return
     }
@@ -371,16 +405,61 @@ export default function VideoEnCursoPage() {
       mediaRecorder.ondataavailable = (event: BlobEvent) => {
         if (event.data && event.data.size > 0) {
           recordedChunksRef.current.push(event.data)
+          console.log('Chunk recibido, tamaño:', event.data.size, 'Total chunks:', recordedChunksRef.current.length)
         }
       }
 
       mediaRecorder.onstop = async () => {
+        console.log('MediaRecorder detenido, procesando video...')
+        console.log('Total chunks antes de crear blob:', recordedChunksRef.current.length)
+        
+        if (recordedChunksRef.current.length === 0) {
+          console.warn('No hay chunks para crear el video')
+          // Resolver la promesa incluso si no hay datos
+          if (stopRecordingResolverRef.current) {
+            stopRecordingResolverRef.current()
+            stopRecordingResolverRef.current = null
+          }
+          return
+        }
+        
         const blob = new Blob(recordedChunksRef.current, { type: "video/webm" })
+        console.log('Blob creado, tamaño:', blob.size)
+        
+        if (blob.size === 0) {
+          console.warn('El blob está vacío')
+          // Resolver la promesa incluso si el blob está vacío
+          if (stopRecordingResolverRef.current) {
+            stopRecordingResolverRef.current()
+            stopRecordingResolverRef.current = null
+          }
+          return
+        }
+        
         const base64 = await blobToBase64(blob)
-        setRecordings((prev) => [...prev, base64])
+        console.log('Video convertido a base64, longitud:', base64.length)
+        
+        // Guardar en ref para acceso inmediato
+        latestRecordingRef.current = base64
+        
+        setRecordings((prev) => {
+          const newRecordings = [...prev, base64]
+          console.log('Videos guardados, total:', newRecordings.length)
+          return newRecordings
+        })
+        
+        // Limpiar chunks después de guardar
+        recordedChunksRef.current = []
+        
+        // Resolver la promesa si existe (para stopRecordingAndWait)
+        if (stopRecordingResolverRef.current) {
+          stopRecordingResolverRef.current()
+          stopRecordingResolverRef.current = null
+        }
       }
 
-      mediaRecorder.start()
+      // Iniciar grabación con timeslice para capturar datos periódicamente (cada segundo)
+      mediaRecorder.start(1000)
       setIsRecording(true)
       setRecordingTime(0)
       
@@ -433,18 +512,98 @@ export default function VideoEnCursoPage() {
   }
 
   const handleEliminarFrame = (index: number) => {
-    setCapturedFrames((prev) => prev.filter((_, i) => i !== index))
+    setFrameToDelete(index)
+    setShowDeleteFrameDialog(true)
+  }
+
+  const handleConfirmDeleteFrame = () => {
+    if (frameToDelete !== null) {
+      setCapturedFrames((prev) => prev.filter((_, i) => i !== frameToDelete))
+      setFrameToDelete(null)
+    }
+    setShowDeleteFrameDialog(false)
   }
 
   const handleEliminarRecording = (index: number) => {
-    setRecordings((prev) => prev.filter((_, i) => i !== index))
+    setRecordingToDelete(index)
+    setShowDeleteRecordingDialog(true)
   }
 
-  const handleFinalizar = async () => {
-    console.log('handleFinalizar called', { 
+  const handleConfirmDeleteRecording = () => {
+    if (recordingToDelete !== null) {
+      setRecordings((prev) => prev.filter((_, i) => i !== recordingToDelete))
+      setRecordingToDelete(null)
+    }
+    setShowDeleteRecordingDialog(false)
+  }
+
+  // Detener grabación y esperar a que se guarde
+  const stopRecordingAndWait = (): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!isRecording || !mediaRecorderRef.current) {
+        resolve()
+        return
+      }
+
+      setIsStoppingRecording(true)
+      
+      const mediaRecorder = mediaRecorderRef.current
+      
+      // Guardar el resolver para que el handler onstop original lo llame
+      stopRecordingResolverRef.current = () => {
+        setIsRecording(false)
+        setIsStoppingRecording(false)
+        resolve()
+      }
+
+      if (mediaRecorder.state !== "inactive") {
+        // Solicitar los datos finales antes de detener para asegurar que se capture todo
+        try {
+          if (mediaRecorder.state === "recording") {
+            mediaRecorder.requestData()
+          }
+        } catch (e) {
+          console.log('Error requesting data:', e)
+        }
+        
+        // Pequeño delay para asegurar que los datos se capturen
+        setTimeout(() => {
+          if (mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop()
+          } else {
+            // Si ya está inactivo, resolver inmediatamente
+            setIsStoppingRecording(false)
+            stopRecordingResolverRef.current = null
+            resolve()
+          }
+        }, 100)
+      } else {
+        // Si ya está inactivo, resolver inmediatamente
+        setIsStoppingRecording(false)
+        stopRecordingResolverRef.current = null
+        resolve()
+      }
+    })
+  }
+
+  const handleFinalizar = () => {
+    if (isSaving || isStoppingRecording) {
+      return
+    }
+
+    // Solo mostrar diálogo de confirmación sin detener la grabación
+    // La grabación se detendrá solo si se confirma la finalización
+    setShowFinalizeDialog(true)
+  }
+
+  const handleConfirmFinalizar = async () => {
+    setShowFinalizeDialog(false)
+    
+    console.log('handleConfirmFinalizar called', { 
       inspeccionData, 
       capturedFrames: capturedFrames.length, 
       recordings: recordings.length,
+      isRecording,
       isInitialized,
       isLoading
     })
@@ -461,6 +620,24 @@ export default function VideoEnCursoPage() {
     }
     
     setIsSaving(true)
+    
+    // Si hay una grabación en curso, detenerla y esperar a que se guarde antes de finalizar
+    let newRecording: string | null = null
+    if (isRecording) {
+      console.log('Deteniendo grabación en curso...')
+      latestRecordingRef.current = null // Resetear antes de detener
+      await stopRecordingAndWait()
+      // Obtener la grabación más reciente desde el ref
+      newRecording = latestRecordingRef.current
+      console.log('Grabación detenida, nueva grabación capturada:', newRecording ? 'Sí' : 'No')
+    }
+    
+    // Construir lista de grabaciones: incluir las existentes más la nueva si existe
+    const allRecordings = newRecording 
+      ? [...recordings, newRecording]
+      : recordings
+    
+    console.log('Total de grabaciones a guardar:', allRecordings.length, 'Nueva:', newRecording ? 'Sí' : 'No')
     
     // Save inspection data with captured frames and recordings
     if (inspeccionData) {
@@ -487,10 +664,13 @@ export default function VideoEnCursoPage() {
         const inspectionWithFrames = {
           ...inspeccionData,
           capturedFrames,
-          recordings, // base64 webm strings
+          recordings: allRecordings, // base64 webm strings (incluye la grabación que acaba de detenerse)
           recordingTime: inspectionTime, // Use total inspection time instead of individual recording time
           sensorCharts: capturedCharts || sensorCharts, // Usar gráficos capturados o los existentes
         }
+        
+        // Limpiar el ref después de usarlo
+        latestRecordingRef.current = null
         
         console.log('Gráficos finales que se guardarán:', inspectionWithFrames.sensorCharts)
 
@@ -1026,10 +1206,15 @@ export default function VideoEnCursoPage() {
 
           <Button 
             onClick={handleFinalizar} 
-            disabled={isSaving}
+            disabled={isSaving || isStoppingRecording}
             className="bg-accent hover:bg-accent/90 text-accent-foreground px-8 disabled:opacity-50"
           >
-            {isSaving ? (
+            {isStoppingRecording ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-accent-foreground mr-2"></div>
+                Deteniendo grabación...
+              </>
+            ) : isSaving ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-accent-foreground mr-2"></div>
                 Guardando...
@@ -1119,6 +1304,92 @@ export default function VideoEnCursoPage() {
           inspectionStartTime={inspectionStartTime || Date.now()}
           onChartCaptured={setSensorCharts}
         />
+
+        {/* Diálogo de confirmación para finalizar */}
+        <AlertDialog open={showFinalizeDialog} onOpenChange={setShowFinalizeDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Finalizar inspección?</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Está seguro que desea finalizar la inspección? Esta acción guardará todos los datos
+                {(() => {
+                  const parts = []
+                  if (recordings.length > 0) {
+                    parts.push(`${recordings.length} grabación(es) guardada(s)`)
+                  }
+                  if (isRecording) {
+                    parts.push('1 grabación en curso')
+                  }
+                  if (capturedFrames.length > 0) {
+                    parts.push(`${capturedFrames.length} captura(s)`)
+                  }
+                  if (parts.length > 0) {
+                    return `, incluyendo ${parts.join(', ')}.`
+                  }
+                  return '.'
+                })()}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmFinalizar}>
+                Finalizar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Diálogo de confirmación para eliminar captura */}
+        <AlertDialog 
+          open={showDeleteFrameDialog} 
+          onOpenChange={(open) => {
+            setShowDeleteFrameDialog(open)
+            if (!open) {
+              setFrameToDelete(null)
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar captura?</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Está seguro que desea eliminar esta captura? Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmDeleteFrame} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Diálogo de confirmación para eliminar grabación */}
+        <AlertDialog 
+          open={showDeleteRecordingDialog} 
+          onOpenChange={(open) => {
+            setShowDeleteRecordingDialog(open)
+            if (!open) {
+              setRecordingToDelete(null)
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar grabación?</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Está seguro que desea eliminar esta grabación? Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmDeleteRecording} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )
