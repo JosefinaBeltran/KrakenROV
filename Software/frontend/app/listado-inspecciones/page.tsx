@@ -117,7 +117,18 @@ export default function ListadoInspeccionesPage() {
   }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(`${dateString}T00:00:00`)
+    // Si la fecha viene en formato YYYY-MM-DD, parsearla correctamente sin conversión de zona horaria
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-').map(Number)
+      const date = new Date(year, month - 1, day) // month - 1 porque Date usa 0-indexed months
+      return date.toLocaleDateString("es-ES", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    }
+    // Fallback para otros formatos
+    const date = new Date(dateString)
     return date.toLocaleDateString("es-ES", {
       year: "numeric",
       month: "long",
@@ -160,7 +171,7 @@ export default function ListadoInspeccionesPage() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Volver al Menú
           </Button>
-          <h1 className="text-3xl font-bold text-foreground">Listado de Inspecciones</h1>
+          <h1 className="text-3xl font-bold text-foreground">Inspecciones</h1>
         </div>
 
         <Card className="mb-6">
@@ -200,9 +211,9 @@ export default function ListadoInspeccionesPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Inspector</label>
+                <label className="text-sm font-medium text-foreground mb-2 block">Operador</label>
                 <Input
-                  placeholder="Buscar por inspector..."
+                  placeholder="Buscar por operador..."
                   value={filters.inspector}
                   onChange={(e) => handleFilterChange("inspector", e.target.value)}
                   className="bg-secondary border-border"
@@ -320,7 +331,7 @@ export default function ListadoInspeccionesPage() {
                     </div>
 
                     <div className="pt-2 border-t border-white/20">
-                      <p className="text-sm text-white/90 drop-shadow-md">Inspector: {inspeccion.nombreApellido}</p>
+                      <p className="text-sm text-white/90 drop-shadow-md">Operador: {inspeccion.nombreApellido}</p>
                     </div>
 
                     <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
