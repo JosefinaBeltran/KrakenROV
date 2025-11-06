@@ -54,7 +54,7 @@ export default function FormularioInspeccionPage() {
       newErrors.descripcion = "La descripción es requerida"
     }
     if (!formData.nombreApellido.trim()) {
-      newErrors.nombreApellido = "El nombre y apellido del inspector es requerido"
+      newErrors.nombreApellido = "El nombre y apellido del operador es requerido"
     }
     if (!formData.matricula.trim()) {
       newErrors.matricula = "La matrícula es requerida"
@@ -169,7 +169,7 @@ export default function FormularioInspeccionPage() {
           {/* Datos del inspector */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Datos del Inspector</CardTitle>
+              <CardTitle className="text-xl">Datos del Operador</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">

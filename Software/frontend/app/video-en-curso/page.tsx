@@ -854,7 +854,7 @@ export default function VideoEnCursoPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold text-foreground">Video en Curso</h1>
+          <h1 className="text-2xl font-bold text-foreground">Monitoreo de la inspección</h1>
           <div className="relative">
             <Button
               variant="outline"
@@ -1003,9 +1003,9 @@ export default function VideoEnCursoPage() {
               )}
             </div>
 
-            {/* Recording indicator - positioned below the sensor overlay */}
+            {/* Recording indicator - positioned below the date/time on the left */}
             {isRecording && (
-              <div className="absolute top-28 right-4 bg-red-600 text-white px-3 py-2 rounded flex items-center gap-2 text-sm">
+              <div className="absolute top-16 left-4 bg-red-600 text-white px-3 py-2 rounded flex items-center gap-2 text-sm">
                 <Circle className="w-3 h-3 fill-current animate-pulse" />
                 REC {formatTime(recordingTime)}
               </div>
@@ -1139,93 +1139,81 @@ export default function VideoEnCursoPage() {
               </div>
             </div>
 
-            {/* Bottom right - Temperature chart and fullscreen button */}
-            <div className="absolute bottom-4 right-4 flex items-end gap-2">
-              {/* Gráfico de Temperatura */}
-              <div className="bg-black/70 text-white p-3 rounded">
-                <div className="text-xs mb-2">Temperatura en tiempo real</div>
-                <svg width="120" height="60" className="text-primary">
-                  <polyline
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    points={chartData.map((value, index) => `${index * 2.4},${60 - (value - 20) * 2}`).join(" ")}
-                  />
-                </svg>
-                <div className="text-xs mt-1 text-center">
-                  {sensorData.temperatura.toFixed(1)}°C
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleFullscreen}
-                className="bg-black/70 hover:bg-black/80 text-white pointer-events-auto"
-              >
-                {isFullscreen ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.5 3.5M15 9h4.5M15 9V4.5M15 9l5.5-5.5M9 15v4.5M9 15H4.5M9 15l-5.5 5.5M15 15h4.5M15 15v4.5m0-4.5l5.5 5.5" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                  </svg>
-                )}
-              </Button>
-            </div>
           </div>
         </div>
 
-        {/* Control buttons */}
-        <div className="flex justify-center gap-4 mb-6">
-          <Button
-            onClick={handleGrabar}
-            className={`${
-              isRecording
-                ? "bg-red-600 hover:bg-red-700 text-white"
-                : "bg-primary hover:bg-primary/90 text-primary-foreground"
-            } px-8`}
-          >
-            {isRecording ? (
-              <>
-                <Square className="w-4 h-4 mr-2" />
-                Detener
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 mr-2" />
-                Grabar
-              </>
+        {/* Control buttons and inspection info */}
+        <div className="relative flex items-center justify-center mb-6">
+          {/* Inspection info - Left side */}
+          <div className="absolute left-0 flex flex-col gap-1 text-sm">
+            {inspectionStartTime && (
+              <div className="text-muted-foreground">
+                Hora de inicio: <span className="text-foreground font-medium">
+                  {new Date(inspectionStartTime).toLocaleTimeString("es-ES", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
             )}
-          </Button>
-
-          <Button onClick={handleCapturar} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8">
-            <Camera className="w-4 h-4 mr-2" />
-            Capturar
-          </Button>
-
-          <Button 
-            onClick={handleFinalizar} 
-            disabled={isSaving || isStoppingRecording}
-            className="bg-accent hover:bg-accent/90 text-accent-foreground px-8 disabled:opacity-50"
-          >
-            {isStoppingRecording ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-accent-foreground mr-2"></div>
-                Deteniendo grabación...
-              </>
-            ) : isSaving ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-accent-foreground mr-2"></div>
-                Guardando...
-              </>
-            ) : (
-              <>
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Finalizar
-              </>
+            {inspeccionData?.nombreApellido && (
+              <div className="text-muted-foreground">
+                Operador a cargo: <span className="text-foreground font-medium">{inspeccionData.nombreApellido}</span>
+              </div>
             )}
-          </Button>
+          </div>
+
+          {/* Control buttons - Center */}
+          <div className="flex gap-4">
+            <Button
+              onClick={handleGrabar}
+              className={`${
+                isRecording
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : "bg-primary hover:bg-primary/90 text-primary-foreground"
+              } px-8`}
+            >
+              {isRecording ? (
+                <>
+                  <Square className="w-4 h-4 mr-2" />
+                  Detener
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Grabar
+                </>
+              )}
+            </Button>
+
+            <Button onClick={handleCapturar} className="bg-primary hover:bg-primary/90 text-primary-foreground px-8">
+              <Camera className="w-4 h-4 mr-2" />
+              Capturar
+            </Button>
+
+            <Button 
+              onClick={handleFinalizar} 
+              disabled={isSaving || isStoppingRecording}
+              className="bg-accent hover:bg-accent/90 text-accent-foreground px-8 disabled:opacity-50"
+            >
+              {isStoppingRecording ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-accent-foreground mr-2"></div>
+                  Deteniendo grabación...
+                </>
+              ) : isSaving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-accent-foreground mr-2"></div>
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Finalizar
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* Recordings and captures sections */}

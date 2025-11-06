@@ -116,7 +116,7 @@ export default function EditarInspeccionPage() {
       newErrors.descripcion = "La descripción es requerida"
     }
     if (!formData.nombreApellido.trim()) {
-      newErrors.nombreApellido = "El nombre y apellido del inspector es requerido"
+      newErrors.nombreApellido = "El nombre y apellido del operador es requerido"
     }
     if (!formData.matricula.trim()) {
       newErrors.matricula = "La matrícula es requerida"
@@ -287,7 +287,7 @@ export default function EditarInspeccionPage() {
           {/* Datos del inspector */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Datos del Inspector</CardTitle>
+              <CardTitle className="text-xl">Datos del Operador</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -327,7 +327,7 @@ export default function EditarInspeccionPage() {
                     <span className="font-medium">{inspeccion.recordings?.length || 0}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Tiempo de grabación:</span>
+                    <span>Tiempo de inspección:</span>
                     <span className="font-medium">{Math.floor(inspeccion.recordingTime / 60)}:{(inspeccion.recordingTime % 60).toString().padStart(2, '0')}</span>
                   </div>
                   <div className="flex justify-between">

@@ -114,6 +114,17 @@ export default function InformeInspeccionPage() {
   }
 
   const formatDate = (dateString: string) => {
+    // Si la fecha viene en formato YYYY-MM-DD, parsearla correctamente sin conversión de zona horaria
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-').map(Number)
+      const date = new Date(year, month - 1, day) // month - 1 porque Date usa 0-indexed months
+      return date.toLocaleDateString("es-ES", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    }
+    // Fallback para otros formatos
     const date = new Date(dateString)
     return date.toLocaleDateString("es-ES", {
       year: "numeric",
@@ -204,7 +215,7 @@ export default function InformeInspeccionPage() {
                 </div>
 
                 <div>
-                  <p className="text-sm text-muted-foreground">Inspector responsable</p>
+                  <p className="text-sm text-muted-foreground">Operador responsable</p>
                   <p className="font-medium">{inspeccion.nombreApellido}</p>
                   <p className="text-sm text-muted-foreground">Matrícula: {inspeccion.matricula}</p>
                 </div>
@@ -246,16 +257,23 @@ export default function InformeInspeccionPage() {
                   {inspeccion.capturedFrames.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {inspeccion.capturedFrames.map((frame, index) => (
-                        <Button
+                        <button
                           key={index}
-                          variant="outline"
-                          size="sm"
                           onClick={() => addCapturedImage(frame)}
-                          className="border-border hover:bg-secondary bg-transparent text-xs"
+                          className="relative group w-20 h-20 rounded-lg overflow-hidden border-2 border-border hover:border-primary transition-colors cursor-pointer"
                         >
-                          <ImageIcon className="w-3 h-3 mr-1" />
-                          Captura {index + 1}
-                        </Button>
+                          <img
+                            src={frame || "/placeholder.svg"}
+                            alt={`Captura ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                            <ImageIcon className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                          <div className="absolute bottom-1 left-1 right-1 bg-black/70 text-white text-[10px] px-1 py-0.5 rounded text-center truncate">
+                            Captura {index + 1}
+                          </div>
+                        </button>
                       ))}
                     </div>
                   )}

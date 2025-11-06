@@ -39,7 +39,7 @@ export default function MenuPage() {
       if (result.success) {
         setStatus({
           success: true,
-          message: `Backup exportado exitosamente: ${result.filename}`
+          message: `Datos exportados exitosamente: ${result.filename}`
         })
       } else {
         setStatus({
@@ -109,7 +109,7 @@ export default function MenuPage() {
       if (result.success) {
         setStatus({
           success: true,
-          message: `Backup importado exitosamente. ${result.importedCount} elementos importados.`
+          message: `Datos importados exitosamente. ${result.importedCount} elementos importados.`
         })
       } else {
         setStatus({
@@ -267,7 +267,7 @@ export default function MenuPage() {
                 <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-2">
                   <Upload className="w-6 h-6 text-blue-600" />
                 </div>
-                <CardTitle className="text-lg">Exportar Backup</CardTitle>
+                <CardTitle className="text-lg">Exportar Datos</CardTitle>
               </CardHeader>
               <CardContent className="text-center">
                 <p className="text-sm text-muted-foreground mb-4">
@@ -299,7 +299,7 @@ export default function MenuPage() {
                 <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-2">
                   <Download className="w-6 h-6 text-green-600" />
                 </div>
-                <CardTitle className="text-lg">Importar Backup</CardTitle>
+                <CardTitle className="text-lg">Importar Datos</CardTitle>
               </CardHeader>
               <CardContent className="text-center">
                 <p className="text-sm text-muted-foreground mb-4">

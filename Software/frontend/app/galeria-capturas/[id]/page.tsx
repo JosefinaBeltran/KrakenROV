@@ -1,12 +1,23 @@
 "use client"
 
+import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { ArrowLeft, Calendar, MapPin, User, ZoomIn } from "lucide-react"
+import { ArrowLeft, Calendar, MapPin, User, ZoomIn, Trash2 } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface Inspeccion {
   id: string
@@ -24,10 +35,12 @@ interface Inspeccion {
 export default function GaleriaCapturas() {
   const router = useRouter()
   const params = useParams()
-  const { getInspeccionById } = useDatabase()
+  const { getInspeccionById, updateInspeccion } = useDatabase()
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [showDeleteFrameDialog, setShowDeleteFrameDialog] = useState(false)
+  const [frameToDelete, setFrameToDelete] = useState<number | null>(null)
 
   useEffect(() => {
     const loadInspeccion = async () => {
@@ -51,6 +64,17 @@ export default function GaleriaCapturas() {
   }, [params.id, getInspeccionById])
 
   const formatDate = (dateString: string) => {
+    // Si la fecha viene en formato YYYY-MM-DD, parsearla correctamente sin conversión de zona horaria
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateString.split('-').map(Number)
+      const date = new Date(year, month - 1, day) // month - 1 porque Date usa 0-indexed months
+      return date.toLocaleDateString("es-ES", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    }
+    // Fallback para otros formatos
     const date = new Date(dateString)
     return date.toLocaleDateString("es-ES", {
       year: "numeric",
@@ -67,6 +91,50 @@ export default function GaleriaCapturas() {
   const closeModal = () => {
     setSelectedImage(null)
     setSelectedIndex(null)
+  }
+
+  const handleEliminarFrame = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation() // Evitar que se abra el modal al hacer clic en eliminar
+    setFrameToDelete(index)
+    setShowDeleteFrameDialog(true)
+  }
+
+  const handleConfirmDeleteFrame = async () => {
+    if (frameToDelete !== null && inspeccion) {
+      try {
+        const updatedFrames = inspeccion.capturedFrames.filter((_, i) => i !== frameToDelete)
+        // Recargar la inspección completa desde la base de datos para asegurar que tenemos todos los campos
+        const fullInspeccion = await getInspeccionById(inspeccion.id)
+        if (fullInspeccion) {
+          const updatedInspeccion = {
+            ...fullInspeccion,
+            capturedFrames: updatedFrames
+          }
+          await updateInspeccion(updatedInspeccion)
+          setInspeccion(updatedInspeccion)
+        }
+        setFrameToDelete(null)
+      } catch (error) {
+        console.error('Error deleting frame:', error)
+        // Fallback to localStorage
+        const data = localStorage.getItem("inspecciones")
+        if (data) {
+          const inspecciones: Inspeccion[] = JSON.parse(data)
+          const updatedInspecciones = inspecciones.map((i) =>
+            i.id === inspeccion.id
+              ? { ...i, capturedFrames: i.capturedFrames.filter((_, idx) => idx !== frameToDelete) }
+              : i
+          )
+          localStorage.setItem("inspecciones", JSON.stringify(updatedInspecciones))
+          const updated = updatedInspecciones.find((i) => i.id === inspeccion.id)
+          if (updated) {
+            setInspeccion(updated)
+          }
+        }
+        setFrameToDelete(null)
+      }
+    }
+    setShowDeleteFrameDialog(false)
   }
 
   if (!inspeccion) {
@@ -129,7 +197,7 @@ export default function GaleriaCapturas() {
               <div className="flex items-center gap-3">
                 <User className="w-5 h-5 text-primary" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Inspector</p>
+                  <p className="text-sm text-muted-foreground">Operador</p>
                   <p className="font-medium">{inspeccion.nombreApellido}</p>
                 </div>
               </div>
@@ -176,6 +244,14 @@ export default function GaleriaCapturas() {
                     <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
                       Captura {index + 1}
                     </div>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={(e) => handleEliminarFrame(e, index)}
+                      className="absolute top-2 right-2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -197,6 +273,32 @@ export default function GaleriaCapturas() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Diálogo de confirmación para eliminar captura */}
+        <AlertDialog 
+          open={showDeleteFrameDialog} 
+          onOpenChange={(open) => {
+            setShowDeleteFrameDialog(open)
+            if (!open) {
+              setFrameToDelete(null)
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar captura?</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Está seguro que desea eliminar esta captura? Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmDeleteFrame} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

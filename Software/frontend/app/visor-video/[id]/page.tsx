@@ -672,7 +672,7 @@ export default function VisorVideoPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <User className="w-5 h-5 text-primary" />
-                  Inspector
+                  Operador
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -784,11 +784,7 @@ export default function VisorVideoPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      {inspeccion.recordings && inspeccion.recordings.length > 0
-                        ? "Sube automáticamente una grabación a YouTube o agrega un enlace manualmente."
-                        : "No hay grabaciones disponibles para subir. Agrega un enlace manualmente."}
-                    </p>
+                    
                     <div className="flex gap-2 flex-wrap">
                       <Button
                         onClick={handleOpenFileExplorer}
