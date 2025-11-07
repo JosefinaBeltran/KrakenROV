@@ -1145,7 +1145,12 @@ export default function VideoEnCursoPage() {
         {/* Control buttons and inspection info */}
         <div className="relative flex items-center justify-center mb-6">
           {/* Inspection info - Left side */}
-          <div className="absolute left-0 flex flex-col gap-1 text-sm">
+          <div className="absolute left-0 grid grid-cols-2 gap-x-6 gap-y-1 text-sm max-w-md pr-4">
+            {inspeccionData?.nombreInspeccion && (
+              <div className="text-muted-foreground break-words">
+                Inspección: <span className="text-foreground font-medium">{inspeccionData.nombreInspeccion}</span>
+              </div>
+            )}
             {inspectionStartTime && (
               <div className="text-muted-foreground">
                 Hora de inicio: <span className="text-foreground font-medium">
@@ -1156,9 +1161,14 @@ export default function VideoEnCursoPage() {
                 </span>
               </div>
             )}
+            {inspeccionData?.lugarInspeccion && (
+              <div className="text-muted-foreground break-words">
+                Lugar: <span className="text-foreground font-medium">{inspeccionData.lugarInspeccion}</span>
+              </div>
+            )}
             {inspeccionData?.nombreApellido && (
               <div className="text-muted-foreground">
-                Operador a cargo: <span className="text-foreground font-medium">{inspeccionData.nombreApellido}</span>
+                Operador: <span className="text-foreground font-medium">{inspeccionData.nombreApellido}</span>
               </div>
             )}
           </div>

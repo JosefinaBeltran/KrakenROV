@@ -7,7 +7,7 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Calendar, MapPin, FileCheck, Upload, ImageIcon, Printer as Print } from "lucide-react"
+import { ArrowLeft, Calendar, MapPin, FileCheck, Upload, ImageIcon, Printer as Print, User, Clock, CreditCard } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import SensorCharts from "@/components/SensorCharts"
 
@@ -185,45 +185,67 @@ export default function InformeInspeccionPage() {
             <p className="text-muted-foreground">Sistema de Inspecciones Profesional</p>
           </CardHeader>
           <CardContent className="p-8 space-y-6">
-            {/* Basic information */}
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <FileCheck className="w-5 h-5 text-primary mt-1" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Nombre de la inspección</p>
-                    <p className="font-semibold text-lg">{inspeccion.nombreInspeccion}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-5 h-5 text-primary mt-1" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Lugar de la inspección</p>
-                    <p className="font-medium">{inspeccion.lugarInspeccion}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <Calendar className="w-5 h-5 text-primary mt-1" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Fecha de la inspección</p>
-                    <p className="font-medium">{formatDate(inspeccion.fechaInspeccion)}</p>
-                  </div>
-                </div>
-
+            {/* Operador y Matrícula alineados con el grid */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex items-start gap-3">
+                <User className="w-5 h-5 text-primary mt-1" />
                 <div>
                   <p className="text-sm text-muted-foreground">Operador responsable</p>
-                  <p className="font-medium">{inspeccion.nombreApellido}</p>
-                  <p className="text-sm text-muted-foreground">Matrícula: {inspeccion.matricula}</p>
+                  <p className="font-semibold text-lg">{inspeccion.nombreApellido}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <CreditCard className="w-5 h-5 text-primary mt-1" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Matrícula</p>
+                  <p className="font-semibold text-lg">{inspeccion.matricula}</p>
                 </div>
               </div>
             </div>
 
+            {/* Línea separadora */}
+            <div className="border-t border-border pt-6"></div>
+
+            {/* Información de la inspección */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex items-start gap-3">
+                <FileCheck className="w-5 h-5 text-primary mt-1" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Nombre de la inspección</p>
+                  <p className="font-semibold text-lg">{inspeccion.nombreInspeccion}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Calendar className="w-5 h-5 text-primary mt-1" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Fecha de la inspección</p>
+                  <p className="font-medium">{formatDate(inspeccion.fechaInspeccion)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Clock className="w-5 h-5 text-primary mt-1" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Duración de la inspección</p>
+                  <p className="font-medium text-lg">{formatTime(inspeccion.recordingTime)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <MapPin className="w-5 h-5 text-primary mt-1" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Lugar de la inspección</p>
+                  <p className="font-medium">{inspeccion.lugarInspeccion}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Línea separadora */}
+            <div className="border-t border-border pt-6"></div>
+
             {/* Detailed description */}
-            <div className="border-t border-border pt-6">
+            <div>
               <h3 className="text-lg font-semibold mb-4">Detalle de la Inspección</h3>
               <div className="bg-muted/30 p-4 rounded-lg">
                 <p className="text-foreground leading-relaxed whitespace-pre-wrap">{inspeccion.descripcion}</p>
@@ -324,30 +346,10 @@ export default function InformeInspeccionPage() {
               </div>
             )}
 
-            {/* Statistics */}
-            <div className="border-t border-border pt-6">
-              <h3 className="text-lg font-semibold mb-4">Estadísticas de la Inspección</h3>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="bg-muted/30 p-4 rounded-lg text-center">
-                  <p className="text-2xl font-bold text-primary">{formatTime(inspeccion.recordingTime)}</p>
-                  <p className="text-sm text-muted-foreground">Duración de grabación</p>
-                </div>
-                <div className="bg-muted/30 p-4 rounded-lg text-center">
-                  <p className="text-2xl font-bold text-primary">{inspeccion.capturedFrames.length}</p>
-                  <p className="text-sm text-muted-foreground">Capturas realizadas</p>
-                </div>
-                <div className="bg-muted/30 p-4 rounded-lg text-center">
-                  <p className="text-2xl font-bold text-primary">
-                    {new Date(inspeccion.createdAt).toLocaleDateString("es-ES")}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Fecha de creación</p>
-                </div>
-              </div>
-            </div>
 
             {/* Footer */}
             <div className="border-t border-border pt-6 text-center text-sm text-muted-foreground">
-              <p>Informe generado automáticamente por el Sistema de Inspecciones</p>
+              <p>Informe generado por el Sistema de Inspecciones Kraken ROV</p>
               <p>Fecha de generación: {new Date().toLocaleString("es-ES")}</p>
             </div>
           </CardContent>

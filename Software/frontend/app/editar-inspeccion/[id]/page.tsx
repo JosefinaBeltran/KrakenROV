@@ -330,10 +330,6 @@ export default function EditarInspeccionPage() {
                     <span>Tiempo de inspección:</span>
                     <span className="font-medium">{Math.floor(inspeccion.recordingTime / 60)}:{(inspeccion.recordingTime % 60).toString().padStart(2, '0')}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Fecha de creación:</span>
-                    <span className="font-medium">{new Date(inspeccion.createdAt).toLocaleDateString('es-ES')}</span>
-                  </div>
                 </div>
               </div>
             </CardContent>
