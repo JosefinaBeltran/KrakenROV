@@ -96,11 +96,15 @@ export default function VisorVideoPage() {
     const updateDuration = () => {
       const videoDuration = video.duration
       console.log('Checking video duration:', videoDuration, 'readyState:', video.readyState)
-      if (videoDuration && !isNaN(videoDuration) && isFinite(videoDuration) && videoDuration > 0) {
+      if (videoDuration && isFinite(videoDuration) && !isNaN(videoDuration) && videoDuration > 0) {
         console.log('Setting duration to:', videoDuration)
         setDuration(videoDuration)
       } else {
-        console.log('Duration not valid yet')
+        console.log('Duration not valid yet:', videoDuration)
+        // Don't set invalid durations
+        if (videoDuration === Infinity || isNaN(videoDuration)) {
+          console.warn('Invalid duration detected, not updating state')
+        }
       }
     }
 
@@ -230,40 +234,122 @@ export default function VisorVideoPage() {
     setIsPlaying(false)
     setDuration(0)
     
-    // Force video to reload with new source
+    // Force video to reload with new source and load metadata
     video.load()
+    
+    // Try to load metadata immediately
+    if (video.readyState === 0) {
+      // Video hasn't started loading, force it
+      video.load()
+    }
     
     // Add listeners to track loading progress
     const checkDuration = () => {
-      console.log('Video metadata loaded, duration:', video.duration, 'readyState:', video.readyState)
-      if (video.duration && !isNaN(video.duration) && video.duration > 0) {
-        setDuration(video.duration)
+      const videoDuration = video.duration
+      console.log('Video metadata loaded, duration:', videoDuration, 'readyState:', video.readyState)
+      if (videoDuration && isFinite(videoDuration) && !isNaN(videoDuration) && videoDuration > 0) {
+        console.log('Setting duration to:', videoDuration)
+        setDuration(videoDuration)
+        setIsVideoLoading(false)
+      } else {
+        console.warn('Invalid duration received:', videoDuration)
+      }
+    }
+    
+    const onDurationChange = () => {
+      const videoDuration = video.duration
+      console.log('Duration changed event, duration:', videoDuration)
+      if (videoDuration && isFinite(videoDuration) && !isNaN(videoDuration) && videoDuration > 0) {
+        console.log('Setting duration from durationchange event:', videoDuration)
+        setDuration(videoDuration)
         setIsVideoLoading(false)
       }
     }
     
     const onCanPlay = () => {
-      console.log('Video can play, duration:', video.duration)
+      const videoDuration = video.duration
+      console.log('Video can play, duration:', videoDuration)
+      // Double-check duration when video can play
+      if (videoDuration && isFinite(videoDuration) && !isNaN(videoDuration) && videoDuration > 0) {
+        setDuration(videoDuration)
+      }
       setIsVideoLoading(false)
     }
     
     const onError = (e: Event) => {
       console.error('Video loading error:', e)
+      setDuration(0)
       setIsVideoLoading(false)
     }
     
+    // Set up a polling mechanism to check duration if metadata doesn't load immediately
+    let durationCheckInterval: NodeJS.Timeout | null = null
+    let checkCount = 0
+    const maxChecks = 40 // Check for up to 20 seconds (40 * 500ms)
+    
+    const checkDurationPolling = () => {
+      const videoDuration = video.duration
+      if (videoDuration && isFinite(videoDuration) && !isNaN(videoDuration) && videoDuration > 0) {
+        console.log('Duration found via polling:', videoDuration)
+        setDuration(videoDuration)
+        if (durationCheckInterval) {
+          clearInterval(durationCheckInterval)
+          durationCheckInterval = null
+        }
+        setIsVideoLoading(false)
+        return true
+      }
+      return false
+    }
+    
+    const startDurationPolling = () => {
+      if (durationCheckInterval) return
+      
+      // Check immediately first
+      if (checkDurationPolling()) {
+        return
+      }
+      
+      // Then check every 200ms for faster response
+      durationCheckInterval = setInterval(() => {
+        checkCount++
+        if (checkDurationPolling()) {
+          return
+        }
+        if (checkCount >= maxChecks) {
+          console.warn('Duration polling timeout, stopping checks')
+          if (durationCheckInterval) {
+            clearInterval(durationCheckInterval)
+            durationCheckInterval = null
+          }
+        }
+      }, 200)
+    }
+    
     video.addEventListener('loadedmetadata', checkDuration, { once: true })
+    video.addEventListener('durationchange', onDurationChange)
     video.addEventListener('canplay', onCanPlay, { once: true })
     video.addEventListener('error', onError, { once: true })
     
+    // Start polling as backup
+    startDurationPolling()
+    
     return () => {
       video.removeEventListener('loadedmetadata', checkDuration)
+      video.removeEventListener('durationchange', onDurationChange)
       video.removeEventListener('canplay', onCanPlay)
       video.removeEventListener('error', onError)
+      if (durationCheckInterval) {
+        clearInterval(durationCheckInterval)
+      }
     }
   }, [videoBlobUrl])
 
   const formatTime = (seconds: number) => {
+    // Validate that seconds is a finite number
+    if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) {
+      return "00:00"
+    }
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
@@ -406,7 +492,20 @@ export default function VisorVideoPage() {
     const rect = e.currentTarget.getBoundingClientRect()
     const clickX = e.clientX - rect.left
     const percentage = Math.max(0, Math.min(1, clickX / rect.width)) // Clamp between 0 and 1
+    
+    // Validate that duration is a finite number
+    if (!isFinite(duration) || duration <= 0) {
+      console.warn('Invalid duration:', duration)
+      return
+    }
+    
     const newTime = percentage * duration
+    
+    // Validate that newTime is a finite number before setting
+    if (!isFinite(newTime) || newTime < 0) {
+      console.warn('Invalid newTime calculated:', newTime, { percentage, duration })
+      return
+    }
     
     video.currentTime = newTime
     setCurrentTime(newTime)
@@ -422,6 +521,12 @@ export default function VisorVideoPage() {
       return
     }
 
+    // Validate that duration is a finite number
+    if (!isFinite(duration) || duration <= 0) {
+      console.warn('Invalid duration in handleSeekStart:', duration)
+      return
+    }
+
     setIsSeeking(true)
     handleSeek(e)
     
@@ -430,10 +535,20 @@ export default function VisorVideoPage() {
       const target = e.currentTarget
       if (!video || !duration || !target) return
 
+      // Validate that duration is still a finite number
+      if (!isFinite(duration) || duration <= 0) {
+        return
+      }
+
       const rect = target.getBoundingClientRect()
       const clickX = moveEvent.clientX - rect.left
       const percentage = Math.max(0, Math.min(1, clickX / rect.width))
       const newTime = percentage * duration
+      
+      // Validate that newTime is a finite number before setting
+      if (!isFinite(newTime) || newTime < 0) {
+        return
+      }
       
       video.currentTime = newTime
       setCurrentTime(newTime)
@@ -567,7 +682,7 @@ export default function VisorVideoPage() {
                       controls={false}
                       muted={isMuted}
                       className="w-full h-full object-contain bg-black"
-                      preload="auto"
+                      preload="metadata"
                       playsInline
                     />
                   ) : (
@@ -609,7 +724,7 @@ export default function VisorVideoPage() {
                   {/* Interactive Progress bar */}
                   <div className="mb-4">
                     <div 
-                      className="relative w-full bg-muted/60 rounded-full h-2 cursor-pointer hover:h-2.5 transition-all duration-200 group"
+                      className="relative w-full bg-muted rounded-full h-2.5 cursor-pointer hover:h-3 transition-all duration-200 group"
                       onMouseDown={handleSeekStart}
                       title={`${formatTime(currentTime)} / ${formatTime(duration)}`}
                     >

@@ -189,7 +189,7 @@ export default function ListadoInspeccionesPage() {
                   type="date"
                   value={filters.fechaDesde}
                   onChange={(e) => handleFilterChange("fechaDesde", e.target.value)}
-                  className="bg-secondary border-border"
+                  className="bg-secondary border-border [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                 />
               </div>
               <div>
@@ -198,7 +198,7 @@ export default function ListadoInspeccionesPage() {
                   type="date"
                   value={filters.fechaHasta}
                   onChange={(e) => handleFilterChange("fechaHasta", e.target.value)}
-                  className="bg-secondary border-border"
+                  className="bg-secondary border-border [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                 />
               </div>
               <div>
