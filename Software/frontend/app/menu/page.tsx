@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ClipboardList, LogOut, Database } from "lucide-react"
+import { ClipboardList, LogOut, Database, Users } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 
 export default function MenuPage() {
@@ -100,6 +100,24 @@ export default function MenuPage() {
                   className="w-full btn-primary"
                   onClick={() => router.push("/gestion-datos")}>
                   Gestionar Datos
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentUser && hasPermission('canManageUsers') && (
+            <Card className="cursor-pointer hover:bg-card/80 transition-colors">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
+                  <Users className="w-8 h-8 text-primary-foreground" />
+                </div>
+                <CardTitle className="text-xl">Gestión de Usuarios</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  className="w-full btn-primary"
+                  onClick={() => router.push("/gestion-usuarios")}>
+                  Gestionar Usuarios
                 </Button>
               </CardContent>
             </Card>

@@ -237,6 +237,36 @@ export function useDatabase() {
     return await localDB.getUser(username)
   }, [isInitialized])
 
+  const getAllUsers = useCallback(async () => {
+    if (!isInitialized) return []
+    return await localDB.getAllUsers()
+  }, [isInitialized])
+
+  const deleteUser = useCallback(async (userId: string) => {
+    if (!isInitialized) return { success: false, error: 'Database not initialized' }
+    
+    try {
+      // Prevent deleting the current user
+      if (currentUser && currentUser.id === userId) {
+        return { success: false, error: 'No puedes eliminar tu propio usuario' }
+      }
+      
+      // Prevent deleting predefined users
+      if (userId === 'superuser-001' || userId === 'operator-001') {
+        return { success: false, error: 'No se pueden eliminar usuarios predefinidos' }
+      }
+      
+      await localDB.deleteUser(userId)
+      return { success: true }
+    } catch (error) {
+      console.error('Error deleting user:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Error al eliminar usuario'
+      }
+    }
+  }, [isInitialized, currentUser])
+
   // Session operations
   const saveSession = useCallback(async (session: Omit<Session, 'id' | 'createdAt' | 'lastActivity'>) => {
     if (!isInitialized) return
@@ -454,6 +484,8 @@ export function useDatabase() {
     hasPermission,
     saveUser,
     getUser,
+    getAllUsers,
+    deleteUser,
     saveSession,
     getActiveSession,
     clearSession,

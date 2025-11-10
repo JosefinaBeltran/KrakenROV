@@ -7,6 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   ArrowLeft,
   Play,
   Pause,
@@ -20,6 +30,8 @@ import {
   Youtube,
   Video,
   FolderOpen,
+  Camera,
+  Trash2,
 } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import { VideoControls } from "@/components/VideoControls"
@@ -36,6 +48,9 @@ interface Inspeccion {
   recordingTime: number
   recordings?: string[] // Added recordings array for multiple recordings
   createdAt: string
+  updatedAt?: string
+  createdBy?: string
+  syncedToCloud?: boolean
   youtubeLink?: string
 }
 
@@ -57,11 +72,16 @@ export default function VisorVideoPage() {
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null)
   const [isVideoLoading, setIsVideoLoading] = useState(false)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [showDeleteFrameDialog, setShowDeleteFrameDialog] = useState(false)
+  const [frameToDelete, setFrameToDelete] = useState<number | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const videoContainerRef = useRef<HTMLDivElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     const loadInspeccion = async () => {
+      if (!params?.id) return
       console.log('Loading inspeccion for video viewer, ID:', params.id)
       try {
         const found = await getInspeccionById(params.id as string)
@@ -86,7 +106,7 @@ export default function VisorVideoPage() {
     }
     
     loadInspeccion()
-  }, [params.id, getInspeccionById])
+  }, [params?.id, getInspeccionById])
 
   // Wire up HTML5 video events for real playback
   useEffect(() => {
@@ -421,9 +441,12 @@ export default function VisorVideoPage() {
     try {
       const updatedInspeccion = {
         ...inspeccion,
-        youtubeLink: youtubeLink.trim()
+        youtubeLink: youtubeLink.trim(),
+        updatedAt: new Date().toISOString(),
+        createdBy: inspeccion.createdBy || '',
+        syncedToCloud: inspeccion.syncedToCloud ?? false
       }
-      await updateInspeccion(updatedInspeccion)
+      await updateInspeccion(updatedInspeccion as any)
       setInspeccion(updatedInspeccion)
       setLinkSaved(true)
       setIsDialogOpen(false)
@@ -581,6 +604,93 @@ export default function VisorVideoPage() {
     }
   }
 
+  const handleCapturar = async () => {
+    const video = videoRef.current
+    if (!video || !inspeccion) return
+
+    setIsCapturing(true)
+    try {
+      // Crear un canvas temporal si no existe
+      let canvas = canvasRef.current
+      if (!canvas) {
+        canvas = document.createElement('canvas')
+        canvasRef.current = canvas
+      }
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        console.error('No se pudo obtener el contexto del canvas')
+        return
+      }
+
+      // Establecer las dimensiones del canvas iguales al video
+      canvas.width = video.videoWidth || 640
+      canvas.height = video.videoHeight || 480
+
+      // Dibujar el frame actual del video en el canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+      // Convertir el canvas a base64
+      const frameData = canvas.toDataURL('image/jpeg', 0.9)
+
+      // Agregar la captura al array de capturedFrames
+      const updatedFrames = [...(inspeccion.capturedFrames || []), frameData]
+
+      // Actualizar la inspección
+      const updatedInspeccion = {
+        ...inspeccion,
+        capturedFrames: updatedFrames,
+        updatedAt: new Date().toISOString(),
+        createdBy: inspeccion.createdBy || '',
+        syncedToCloud: inspeccion.syncedToCloud ?? false
+      }
+
+      // Guardar en la base de datos
+      await updateInspeccion(updatedInspeccion as any)
+      setInspeccion(updatedInspeccion)
+
+      console.log('Frame capturado exitosamente. Total de capturas:', updatedFrames.length)
+    } catch (error) {
+      console.error('Error al capturar frame:', error)
+      alert('Error al capturar el frame. Por favor, inténtalo nuevamente.')
+    } finally {
+      setIsCapturing(false)
+    }
+  }
+
+  const handleEliminarFrame = (index: number) => {
+    setFrameToDelete(index)
+    setShowDeleteFrameDialog(true)
+  }
+
+  const handleConfirmDeleteFrame = async () => {
+    if (frameToDelete === null || !inspeccion) return
+
+    try {
+      // Eliminar el frame del array
+      const updatedFrames = inspeccion.capturedFrames.filter((_, i) => i !== frameToDelete)
+
+      // Actualizar la inspección
+      const updatedInspeccion = {
+        ...inspeccion,
+        capturedFrames: updatedFrames,
+        updatedAt: new Date().toISOString(),
+        createdBy: inspeccion.createdBy || '',
+        syncedToCloud: inspeccion.syncedToCloud ?? false
+      }
+
+      // Guardar en la base de datos
+      await updateInspeccion(updatedInspeccion as any)
+      setInspeccion(updatedInspeccion)
+
+      setFrameToDelete(null)
+      setShowDeleteFrameDialog(false)
+    } catch (error) {
+      console.error('Error al eliminar frame:', error)
+      alert('Error al eliminar el frame. Por favor, inténtalo nuevamente.')
+    }
+  }
+
   // Handle fullscreen change events
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -674,6 +784,8 @@ export default function VisorVideoPage() {
                   ref={videoContainerRef}
                   className="relative bg-muted aspect-video flex items-center justify-center"
                 >
+                  {/* Hidden canvas for frame capture */}
+                  <canvas ref={canvasRef} className="hidden" />
                   {videoBlobUrl ? (
                     <video
                       key={videoBlobUrl}
@@ -754,6 +866,16 @@ export default function VisorVideoPage() {
                       <Button variant="ghost" size="sm" onClick={handleMuteToggle}>
                         {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                       </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={handleCapturar}
+                        disabled={isCapturing || !videoBlobUrl}
+                        title="Capturar frame del video"
+                        className="text-primary hover:text-primary/80"
+                      >
+                        <Camera className="w-4 h-4" />
+                      </Button>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button 
@@ -776,6 +898,39 @@ export default function VisorVideoPage() {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Captured frames section */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-xl">Capturas Realizadas ({inspeccion.capturedFrames?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {inspeccion.capturedFrames && inspeccion.capturedFrames.length > 0 ? (
+                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                    {inspeccion.capturedFrames.map((frame, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={frame || "/placeholder.svg"}
+                          alt={`Captura ${index + 1}`}
+                          className="w-full h-20 object-cover rounded border border-border"
+                        />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleEliminarFrame(index)}
+                          className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Eliminar captura"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">No hay capturas realizadas</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -813,7 +968,7 @@ export default function VisorVideoPage() {
                 <div className="flex items-center gap-3">
                   <Clock className="w-4 h-4 text-primary" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Duración total</p>
+                    <p className="text-sm text-muted-foreground">Duración total de la inspección</p>
                     <p className="font-medium">{formatTime(inspeccion.recordingTime)}</p>
                   </div>
                 </div>
@@ -1001,6 +1156,35 @@ export default function VisorVideoPage() {
             </div>
           </div>
         )}
+
+        {/* Diálogo de confirmación para eliminar captura */}
+        <AlertDialog 
+          open={showDeleteFrameDialog} 
+          onOpenChange={(open) => {
+            setShowDeleteFrameDialog(open)
+            if (!open) {
+              setFrameToDelete(null)
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar captura?</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Está seguro que desea eliminar esta captura? Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleConfirmDeleteFrame} 
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

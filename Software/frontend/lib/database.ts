@@ -200,6 +200,15 @@ class LocalDatabase {
     })
   }
 
+  async deleteUser(id: string): Promise<void> {
+    const store = await this.getStore('users', 'readwrite')
+    return new Promise((resolve, reject) => {
+      const request = store.delete(id)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
   // Session operations
   async saveSession(session: Session): Promise<void> {
     const store = await this.getStore('sessions', 'readwrite')
