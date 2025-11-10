@@ -1,25 +1,38 @@
 // Predefined users for the application
 import { User } from './database'
+import { hashPassword } from './password'
 
-export const PREDEFINED_USERS: User[] = [
-  {
-    id: 'superuser-001',
-    username: 'admin',
-    name: 'Administrador',
-    role: 'superuser',
-    displayName: 'Super Usuario',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'operator-001',
-    username: 'operador',
-    name: 'Operador',
-    role: 'operator',
-    displayName: 'Operador Invitado',
-    createdAt: new Date().toISOString()
-  }
-]
+// Helper function to create predefined users with hashed passwords
+// This will be called during initialization
+export async function getPredefinedUsers(): Promise<User[]> {
+  const adminPasswordHash = await hashPassword('admin123')
+  const operatorPasswordHash = await hashPassword('operador123')
 
+  return [
+    {
+      id: 'superuser-001',
+      username: 'admin',
+      name: 'Administrador',
+      role: 'superuser' as const,
+      displayName: 'Super Usuario',
+      passwordHash: adminPasswordHash,
+      matricula: 'ADMIN001',
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 'operator-001',
+      username: 'operador',
+      name: 'Operador',
+      role: 'operator' as const,
+      displayName: 'Operador Invitado',
+      passwordHash: operatorPasswordHash,
+      matricula: 'OPER001',
+      createdAt: new Date().toISOString()
+    }
+  ]
+}
+
+// Legacy support - kept for backward compatibility but passwords should be hashed
 export const DEFAULT_PASSWORDS: Record<string, string> = {
   'superuser-001': 'admin123',
   'operator-001': 'operador123'

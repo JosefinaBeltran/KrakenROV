@@ -2,11 +2,12 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import Image from "next/image"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, UserPlus } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 
 export default function LoginPage() {
@@ -108,9 +109,24 @@ export default function LoginPage() {
               <Button
                 className="w-full bg-amber-400 text-black hover:bg-amber-300 font-semibold"
                 onClick={handleLogin}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleLogin()
+                  }
+                }}
               >
                 Ingresar
               </Button>
+
+              <div className="text-center mt-4">
+                <Link 
+                  href="/registro" 
+                  className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  ¿No tienes cuenta? Regístrate aquí
+                </Link>
+              </div>
               
             </div>
           </div>

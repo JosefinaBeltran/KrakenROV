@@ -7,6 +7,8 @@ export interface User {
   name: string
   role: 'superuser' | 'operator'
   displayName: string
+  passwordHash: string
+  matricula: string
   createdAt: string
 }
 
@@ -57,7 +59,7 @@ export interface TempInspeccionData {
 class LocalDatabase {
   private db: IDBDatabase | null = null
   private dbName = 'KrakenROV_DB'
-  private version = 1
+  private version = 2
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -76,11 +78,24 @@ class LocalDatabase {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result
+        const transaction = (event.target as IDBOpenDBRequest).transaction
 
         // Users table
         if (!db.objectStoreNames.contains('users')) {
           const userStore = db.createObjectStore('users', { keyPath: 'id' })
           userStore.createIndex('username', 'username', { unique: true })
+          userStore.createIndex('matricula', 'matricula', { unique: false })
+        } else if (transaction) {
+          // Migrate existing users table - add matricula index if it doesn't exist
+          const userStore = transaction.objectStore('users')
+          if (!userStore.indexNames.contains('matricula')) {
+            try {
+              userStore.createIndex('matricula', 'matricula', { unique: false })
+            } catch (error) {
+              // Index might already exist, ignore error
+              console.log('Matricula index may already exist')
+            }
+          }
         }
 
         // Sessions table
@@ -147,6 +162,41 @@ class LocalDatabase {
       const request = store.get(id)
       request.onsuccess = () => resolve(request.result || null)
       request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    const store = await this.getStore('users')
+    return new Promise((resolve, reject) => {
+      const request = store.getAll()
+      request.onsuccess = () => resolve(request.result || [])
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getUserByMatricula(matricula: string): Promise<User | null> {
+    const store = await this.getStore('users')
+    return new Promise((resolve, reject) => {
+      try {
+        const index = store.index('matricula')
+        const request = index.getAll(matricula)
+        request.onsuccess = () => {
+          const results = request.result || []
+          // Find exact match
+          const user = results.find((u: User) => u.matricula === matricula)
+          resolve(user || null)
+        }
+        request.onerror = () => reject(request.error)
+      } catch (error) {
+        // Index might not exist yet, fallback to getAll
+        const request = store.getAll()
+        request.onsuccess = () => {
+          const users = request.result || []
+          const user = users.find((u: User) => u.matricula === matricula)
+          resolve(user || null)
+        }
+        request.onerror = () => reject(request.error)
+      }
     })
   }
 

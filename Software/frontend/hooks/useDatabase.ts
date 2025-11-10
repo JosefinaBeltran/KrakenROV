@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { localDB, User, Session, InspeccionData, TempInspeccionData } from '@/lib/database'
 import { backupService } from '@/lib/backupService'
-import { PREDEFINED_USERS, DEFAULT_PASSWORDS, USER_PERMISSIONS, UserRole } from '@/lib/users'
+import { getPredefinedUsers, DEFAULT_PASSWORDS, USER_PERMISSIONS, UserRole } from '@/lib/users'
+import { hashPassword, verifyPassword } from '@/lib/password'
 
 export function useDatabase() {
   const [isInitialized, setIsInitialized] = useState(false)
@@ -33,11 +34,23 @@ export function useDatabase() {
   // Initialize predefined users
   const initializePredefinedUsers = useCallback(async () => {
     try {
-      for (const user of PREDEFINED_USERS) {
-        const existingUser = await localDB.getUser(user.id)
+      const predefinedUsers = await getPredefinedUsers()
+      for (const user of predefinedUsers) {
+        const existingUser = await localDB.getUserById(user.id)
         if (!existingUser) {
           await localDB.saveUser(user)
           console.log('Initialized predefined user:', user.username)
+        } else {
+          // Update existing user if passwordHash or matricula is missing
+          if (!existingUser.passwordHash || !existingUser.matricula) {
+            const updatedUser = {
+              ...existingUser,
+              passwordHash: existingUser.passwordHash || user.passwordHash,
+              matricula: existingUser.matricula || user.matricula
+            }
+            await localDB.saveUser(updatedUser)
+            console.log('Updated predefined user:', user.username)
+          }
         }
       }
     } catch (error) {
@@ -91,21 +104,30 @@ export function useDatabase() {
     }
 
     try {
-      // Find user by username
-      const user = PREDEFINED_USERS.find(u => u.username === username)
+      // Find user by username in database
+      const user = await localDB.getUser(username)
       if (!user) {
         return { success: false, error: 'Usuario no encontrado' }
       }
 
-      // Check password
-      const expectedPassword = DEFAULT_PASSWORDS[user.id]
-      if (password !== expectedPassword) {
-        return { success: false, error: 'Contraseña incorrecta' }
+      // Verify password
+      if (!user.passwordHash) {
+        // Legacy user without password hash, check against DEFAULT_PASSWORDS
+        const expectedPassword = DEFAULT_PASSWORDS[user.id]
+        if (password !== expectedPassword) {
+          return { success: false, error: 'Contraseña incorrecta' }
+        }
+        // Update user with hashed password
+        const passwordHash = await hashPassword(password)
+        user.passwordHash = passwordHash
+        await localDB.saveUser(user)
+      } else {
+        // Verify password hash
+        const isValid = await verifyPassword(password, user.passwordHash)
+        if (!isValid) {
+          return { success: false, error: 'Contraseña incorrecta' }
+        }
       }
-
-      // Ensure user exists in database
-      await localDB.saveUser(user)
-      console.log('User saved to database:', user.username)
 
       // Create session
       const session: Session = {
@@ -127,6 +149,73 @@ export function useDatabase() {
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Error de login' 
+      }
+    }
+  }, [isInitialized])
+
+  // Register new user
+  const register = useCallback(async (
+    username: string,
+    password: string,
+    nombreCompleto: string,
+    matricula: string
+  ): Promise<{ success: boolean; user?: User; error?: string }> => {
+    if (!isInitialized) {
+      return { success: false, error: 'Database not initialized' }
+    }
+
+    try {
+      // Validate inputs
+      if (!username || !password || !nombreCompleto || !matricula) {
+        return { success: false, error: 'Todos los campos son requeridos' }
+      }
+
+      if (username.length < 3) {
+        return { success: false, error: 'El nombre de usuario debe tener al menos 3 caracteres' }
+      }
+
+      if (password.length < 6) {
+        return { success: false, error: 'La contraseña debe tener al menos 6 caracteres' }
+      }
+
+      // Check if username already exists
+      const existingUserByUsername = await localDB.getUser(username)
+      if (existingUserByUsername) {
+        return { success: false, error: 'El nombre de usuario ya existe' }
+      }
+
+      // Check if matricula already exists
+      const existingUserByMatricula = await localDB.getUserByMatricula(matricula)
+      if (existingUserByMatricula) {
+        return { success: false, error: 'La matrícula ya está registrada' }
+      }
+
+      // Hash password
+      const passwordHash = await hashPassword(password)
+
+      // Create new user
+      const newUser: User = {
+        id: `user-${Date.now()}`,
+        username,
+        name: nombreCompleto,
+        displayName: nombreCompleto,
+        role: 'operator', // New users are operators by default
+        passwordHash,
+        matricula,
+        createdAt: new Date().toISOString()
+      }
+
+      // Save user to database
+      await localDB.saveUser(newUser)
+      console.log('User registered:', newUser.username)
+
+      return { success: true, user: newUser }
+      
+    } catch (error) {
+      console.error('Registration error:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Error al registrar usuario' 
       }
     }
   }, [isInitialized])
@@ -359,6 +448,7 @@ export function useDatabase() {
     isLoading,
     currentUser,
     login,
+    register,
     reloadCurrentUser,
     getUserPermissions,
     hasPermission,
