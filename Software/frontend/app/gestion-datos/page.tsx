@@ -94,14 +94,22 @@ export default function GestionDatosPage() {
       const result = await importData(file)
       
       if (result.success) {
+        let message = `Datos importados exitosamente. ${result.importedCount || 0} inspección(es) importada(s).`
+        if (result.failedInspecciones && result.failedInspecciones.length > 0) {
+          message += ` ${result.failedInspecciones.length} inspección(es) no se pudieron importar.`
+        }
         setStatus({
           success: true,
-          message: `Datos importados exitosamente. ${result.importedCount} elementos importados.`
+          message
         })
       } else {
+        let errorMessage = result.error || 'Error desconocido'
+        if (result.importedCount && result.importedCount > 0) {
+          errorMessage = `${errorMessage} ${result.importedCount} inspección(es) se importaron antes del error.`
+        }
         setStatus({
           success: false,
-          message: `Error al importar: ${result.error || 'Error desconocido'}`
+          message: errorMessage
         })
       }
     } catch (error) {
@@ -259,6 +267,7 @@ export default function GestionDatosPage() {
                 accept=".json"
                 className="hidden"
                 onChange={handleImportData}
+                aria-label="Seleccionar archivo de backup"
               />
               <Button 
                 onClick={() => fileInputRef.current?.click()}

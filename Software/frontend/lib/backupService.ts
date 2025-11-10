@@ -85,7 +85,7 @@ class BackupService {
   }
 
   // Import data from JSON file
-  async importData(file: File): Promise<{ success: boolean; importedCount?: number; error?: string }> {
+  async importData(file: File): Promise<{ success: boolean; importedCount?: number; error?: string; failedInspecciones?: string[] }> {
     try {
       console.log('Starting data import from file:', file.name)
       
@@ -99,34 +99,88 @@ class BackupService {
       }
       
       console.log('Backup data validated:', backupData.metadata)
+      console.log('Total inspecciones to import:', backupData.inspecciones.length)
       
       let importedCount = 0
+      let updatedCount = 0
+      let skippedCount = 0
+      const failedInspecciones: string[] = []
+      const errors: string[] = []
       
       // Import inspecciones
-      for (const inspeccion of backupData.inspecciones) {
+      for (let i = 0; i < backupData.inspecciones.length; i++) {
+        const inspeccion = backupData.inspecciones[i]
         try {
+          // Validate inspeccion has required fields
+          if (!inspeccion.id || !inspeccion.nombreInspeccion) {
+            const errorMsg = `Inspección ${i + 1} inválida: falta id o nombreInspeccion`
+            console.error(errorMsg, inspeccion)
+            errors.push(errorMsg)
+            failedInspecciones.push(inspeccion.id || `inspeccion-${i + 1}`)
+            continue
+          }
+
+          // Ensure required fields exist
+          const inspeccionToImport: InspeccionData = {
+            ...inspeccion,
+            id: inspeccion.id,
+            nombreInspeccion: inspeccion.nombreInspeccion,
+            lugarInspeccion: inspeccion.lugarInspeccion || '',
+            fechaInspeccion: inspeccion.fechaInspeccion || new Date().toISOString(),
+            descripcion: inspeccion.descripcion || '',
+            nombreApellido: inspeccion.nombreApellido || '',
+            matricula: inspeccion.matricula || '',
+            capturedFrames: inspeccion.capturedFrames || [],
+            recordings: inspeccion.recordings || [],
+            recordingTime: inspeccion.recordingTime || 0,
+            createdBy: inspeccion.createdBy || '',
+            createdAt: inspeccion.createdAt || new Date().toISOString(),
+            updatedAt: inspeccion.updatedAt || new Date().toISOString(),
+            syncedToCloud: inspeccion.syncedToCloud || false
+          }
+          
           // Check if inspeccion already exists
-          const existing = await localDB.getInspeccionById(inspeccion.id)
+          const existing = await localDB.getInspeccionById(inspeccionToImport.id)
           
           if (!existing) {
             // Import new inspeccion
-            await localDB.saveInspeccion(inspeccion)
+            await localDB.saveInspeccion(inspeccionToImport)
             importedCount++
-            console.log('Imported inspeccion:', inspeccion.id)
+            console.log(`[${i + 1}/${backupData.inspecciones.length}] Imported inspeccion:`, inspeccionToImport.id, inspeccionToImport.nombreInspeccion)
           } else {
             // Update existing inspeccion if backup is newer
-            const backupDate = new Date(inspeccion.updatedAt)
+            const backupDate = new Date(inspeccionToImport.updatedAt)
             const existingDate = new Date(existing.updatedAt)
             
             if (backupDate > existingDate) {
-              await localDB.updateInspeccion(inspeccion)
-              importedCount++
-              console.log('Updated inspeccion:', inspeccion.id)
+              await localDB.updateInspeccion(inspeccionToImport)
+              updatedCount++
+              console.log(`[${i + 1}/${backupData.inspecciones.length}] Updated inspeccion:`, inspeccionToImport.id, inspeccionToImport.nombreInspeccion)
+            } else {
+              skippedCount++
+              console.log(`[${i + 1}/${backupData.inspecciones.length}] Skipped inspeccion (existing is newer):`, inspeccionToImport.id, inspeccionToImport.nombreInspeccion)
             }
           }
         } catch (error) {
-          console.error('Error importing inspeccion:', inspeccion.id, error)
+          const errorMsg = `Error importing inspeccion ${i + 1} (${inspeccion.id || 'unknown'}): ${error instanceof Error ? error.message : 'Unknown error'}`
+          console.error(errorMsg, error)
+          errors.push(errorMsg)
+          failedInspecciones.push(inspeccion.id || `inspeccion-${i + 1}`)
         }
+      }
+      
+      const totalProcessed = importedCount + updatedCount + skippedCount
+      console.log('Import summary:', {
+        total: backupData.inspecciones.length,
+        imported: importedCount,
+        updated: updatedCount,
+        skipped: skippedCount,
+        failed: failedInspecciones.length,
+        totalProcessed
+      })
+      
+      if (errors.length > 0) {
+        console.warn('Import errors:', errors)
       }
       
       // Import users (if any)
@@ -149,9 +203,27 @@ class BackupService {
         }
       }
       
-      console.log('Data import completed successfully:', { importedCount })
+      const totalImported = importedCount + updatedCount
+      console.log('Data import completed:', { 
+        imported: importedCount, 
+        updated: updatedCount, 
+        skipped: skippedCount,
+        failed: failedInspecciones.length,
+        total: totalImported
+      })
       
-      return { success: true, importedCount }
+      // If there were failures, include them in the response
+      if (failedInspecciones.length > 0) {
+        const errorMessage = `${failedInspecciones.length} inspección(es) no se pudieron importar. ${totalImported} importadas exitosamente.`
+        return { 
+          success: totalImported > 0, 
+          importedCount: totalImported,
+          error: errorMessage,
+          failedInspecciones
+        }
+      }
+      
+      return { success: true, importedCount: totalImported }
       
     } catch (error) {
       console.error('Error importing data:', error)
