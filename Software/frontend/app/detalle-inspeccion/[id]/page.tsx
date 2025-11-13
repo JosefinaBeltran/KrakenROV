@@ -70,9 +70,10 @@ export default function DetalleInspeccionPage() {
   }
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
   }
 
   if (!inspeccion) {
@@ -164,65 +165,71 @@ export default function DetalleInspeccionPage() {
 
         {/* Action buttons */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card className="cursor-pointer hover:bg-card/80 transition-colors">
+          <Card className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col h-full">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-3">
                 <Images className="w-6 h-6 text-primary-foreground" />
               </div>
               <CardTitle className="text-lg">Capturas</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col flex-1">
               <p className="text-sm text-muted-foreground text-center mb-4">
                 Ver las {inspeccion.capturedFrames.length} capturas realizadas durante la inspección
               </p>
-              <Button
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                onClick={() => router.push(`/galeria-capturas/${inspeccion.id}`)}
-              >
-                Ver Capturas
-              </Button>
+              <div className="mt-auto">
+                <Button
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={() => router.push(`/galeria-capturas/${inspeccion.id}`)}
+                >
+                  Ver Capturas
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:bg-card/80 transition-colors">
+          <Card className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col h-full">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-3">
                 <FileText className="w-6 h-6 text-primary-foreground" />
               </div>
               <CardTitle className="text-lg">Informe</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col flex-1">
               <p className="text-sm text-muted-foreground text-center mb-4">
                 Generar y ver el informe completo de la inspección
               </p>
-              <Button
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                onClick={() => router.push(`/informe-inspeccion/${inspeccion.id}`)}
-              >
-                Ver Informe
-              </Button>
+              <div className="mt-auto">
+                <Button
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={() => router.push(`/informe-inspeccion/${inspeccion.id}`)}
+                >
+                  Ver Informe
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="cursor-pointer hover:bg-card/80 transition-colors">
+          <Card className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col h-full">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-3">
                 <Video className="w-6 h-6 text-primary-foreground" />
               </div>
               <CardTitle className="text-lg">Video(s)</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col flex-1">
               <p className="text-sm text-muted-foreground text-center mb-4">
                 {inspeccion.recordings && inspeccion.recordings.length > 0
                   ? `Ver ${inspeccion.recordings.length} grabación(es) guardada(s)`
                   : "Sin grabaciones locales, puedes agregar un enlace externo"}
               </p>
-              <Button
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                onClick={() => router.push(`/visor-video/${inspeccion.id}`)}
-              >
-                {inspeccion.recordings && inspeccion.recordings.length > 1 ? "Ver Grabaciones" : "Ver Video"}
-              </Button>
+              <div className="mt-auto">
+                <Button
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={() => router.push(`/visor-video/${inspeccion.id}`)}
+                >
+                  {inspeccion.recordings && inspeccion.recordings.length > 1 ? "Ver Grabaciones" : "Ver Video"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

@@ -328,7 +328,11 @@ export default function EditarInspeccionPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Tiempo de inspección:</span>
-                    <span className="font-medium">{Math.floor(inspeccion.recordingTime / 60)}:{(inspeccion.recordingTime % 60).toString().padStart(2, '0')}</span>
+                    <span className="font-medium">
+                      {Math.floor(inspeccion.recordingTime / 3600).toString().padStart(2, '0')}:
+                      {Math.floor((inspeccion.recordingTime % 3600) / 60).toString().padStart(2, '0')}:
+                      {Math.floor(inspeccion.recordingTime % 60).toString().padStart(2, '0')}
+                    </span>
                   </div>
                 </div>
               </div>

@@ -281,7 +281,7 @@ export default function ListadoInspeccionesPage() {
               return (
                 <Card
                   key={inspeccion.id}
-                  className="cursor-pointer hover:bg-card/80 transition-colors overflow-hidden relative"
+                  className="cursor-pointer hover:bg-card/80 transition-colors overflow-hidden relative flex flex-col h-full"
                   onClick={() => handleInspeccionClick(inspeccion.id)}
                   style={{
                     backgroundImage: firstCapture ? `url(${firstCapture})` : undefined,
@@ -319,7 +319,7 @@ export default function ListadoInspeccionesPage() {
                     </div>
                   </CardHeader>
                   
-                  <CardContent className="space-y-3 relative z-10">
+                  <CardContent className="space-y-3 relative z-10 flex flex-col flex-1">
                     <div className="flex items-center gap-2 text-sm text-white/90 drop-shadow-md">
                       <MapPin className="w-4 h-4" />
                       <span className="line-clamp-1">{inspeccion.lugarInspeccion}</span>
@@ -334,9 +334,11 @@ export default function ListadoInspeccionesPage() {
                       <p className="text-sm text-white/90 drop-shadow-md">Operador: {inspeccion.nombreApellido}</p>
                     </div>
 
-                    <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
-                      Ver Detalles
-                    </Button>
+                    <div className="mt-auto pt-2">
+                      <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg">
+                        Ver Detalles
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               )

@@ -353,9 +353,10 @@ export default function VideoEnCursoPage() {
   }, [])
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+    const hours = Math.floor(seconds / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
   }
 
   const handleGrabar = () => {
@@ -886,7 +887,9 @@ export default function VideoEnCursoPage() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Motor:</span>
-                        <span className="font-medium">{sensorData.motor}</span>
+                        <span className={`font-medium ${sensorData.motor ? 'text-red-500' : 'text-green-500'}`}>
+                          {sensorData.motor ? 'OFF' : 'ON'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -910,7 +913,7 @@ export default function VideoEnCursoPage() {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Obstáculos:</span>
                         <span className={`font-medium ${sensorData.obstacles ? 'text-red-500' : 'text-green-500'}`}>
-                          {sensorData.obstacles ? 'Sí' : 'No'}
+                          {sensorData.obstacles ? 'SÍ' : 'NO'}
                         </span>
                       </div>
                     </div>

@@ -228,16 +228,7 @@ export default function GestionUsuariosPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 mt-4">
-                <div>
-                  <Label htmlFor="username">Nombre de Usuario</Label>
-                  <Input
-                    id="username"
-                    placeholder="Ingrese nombre de usuario"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="mt-1"
-                  />
-                </div>
+                
                 <div>
                   <Label htmlFor="nombreCompleto">Nombre Completo</Label>
                   <Input
@@ -255,6 +246,16 @@ export default function GestionUsuariosPage() {
                     placeholder="Ingrese matrícula"
                     value={matricula}
                     onChange={(e) => setMatricula(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="username">Nombre de Usuario</Label>
+                  <Input
+                    id="username"
+                    placeholder="Ingrese nombre de usuario"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="mt-1"
                   />
                 </div>

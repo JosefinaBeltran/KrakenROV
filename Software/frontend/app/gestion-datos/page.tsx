@@ -218,46 +218,48 @@ export default function GestionDatosPage() {
         )}
 
         <div className="grid gap-6 md:grid-cols-3">
-          <Card>
+          <Card className="flex flex-col h-full">
             <CardHeader className="text-center">
               <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
                 <Upload className="w-8 h-8 text-blue-600" />
               </div>
               <CardTitle className="text-xl">Exportar Datos</CardTitle>
             </CardHeader>
-            <CardContent className="text-center">
+            <CardContent className="text-center flex flex-col flex-1">
               <p className="text-sm text-muted-foreground mb-4">
                 Descargar todos los datos como archivo JSON
               </p>
-              <Button 
-                onClick={handleExportData}
-                disabled={isProcessing || !isInitialized}
-                className="w-full"
-                variant="outline"
-              >
-                {isProcessing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                    Exportando...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Exportar
-                  </>
-                )}
-              </Button>
+              <div className="mt-auto">
+                <Button 
+                  onClick={handleExportData}
+                  disabled={isProcessing || !isInitialized}
+                  className="w-full"
+                  variant="outline"
+                >
+                  {isProcessing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                      Exportando...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Exportar
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="flex flex-col h-full">
             <CardHeader className="text-center">
               <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                 <Download className="w-8 h-8 text-green-600" />
               </div>
               <CardTitle className="text-xl">Importar Datos</CardTitle>
             </CardHeader>
-            <CardContent className="text-center">
+            <CardContent className="text-center flex flex-col flex-1">
               <p className="text-sm text-muted-foreground mb-4">
                 Cargar datos desde archivo JSON
               </p>
@@ -269,41 +271,9 @@ export default function GestionDatosPage() {
                 onChange={handleImportData}
                 aria-label="Seleccionar archivo de backup"
               />
-              <Button 
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isProcessing || !isInitialized}
-                className="w-full"
-                variant="outline"
-              >
-                {isProcessing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                    Importando...
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4 mr-2" />
-                    Importar
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {hasPermission('canClearAllData') && (
-            <Card>
-              <CardHeader className="text-center">
-                <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                  <Trash2 className="w-8 h-8 text-red-600" />
-                </div>
-                <CardTitle className="text-xl">Limpiar Datos</CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <p className="text-sm text-muted-foreground mb-4">
-                  Eliminar todos los datos locales
-                </p>
+              <div className="mt-auto">
                 <Button 
-                  onClick={handleClearAllData}
+                  onClick={() => fileInputRef.current?.click()}
                   disabled={isProcessing || !isInitialized}
                   className="w-full"
                   variant="outline"
@@ -311,15 +281,51 @@ export default function GestionDatosPage() {
                   {isProcessing ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
-                      Eliminando...
+                      Importando...
                     </>
                   ) : (
                     <>
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Limpiar
+                      <Download className="w-4 h-4 mr-2" />
+                      Importar
                     </>
                   )}
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {hasPermission('canClearAllData') && (
+            <Card className="flex flex-col h-full">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                  <Trash2 className="w-8 h-8 text-red-600" />
+                </div>
+                <CardTitle className="text-xl">Limpiar Datos</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center flex flex-col flex-1">
+                <p className="text-sm text-muted-foreground mb-4">
+                  Eliminar todos los datos locales
+                </p>
+                <div className="mt-auto">
+                  <Button 
+                    onClick={handleClearAllData}
+                    disabled={isProcessing || !isInitialized}
+                    className="w-full"
+                    variant="outline"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                        Eliminando...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Limpiar
+                      </>
+                    )}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
