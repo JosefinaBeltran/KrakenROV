@@ -33,6 +33,32 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
+function PasswordRequirements({ password }: { password: string }) {
+  if (!password) return null
+
+  const hasMinLength = password.length >= 8
+  const hasUppercase = /[A-Z]/.test(password)
+  const hasNumber = /[0-9]/.test(password)
+
+  return (
+    <div className="text-xs space-y-1 mt-2 p-3 bg-muted/30 rounded-md border border-border/50">
+      <p className="font-medium mb-1.5 text-foreground">Requisitos de contraseña:</p>
+      <div className={`flex items-center gap-2 transition-colors ${hasMinLength ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+        <div className={`w-2 h-2 rounded-full ${hasMinLength ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+        <span>Mínimo 8 caracteres</span>
+      </div>
+      <div className={`flex items-center gap-2 transition-colors ${hasUppercase ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+        <div className={`w-2 h-2 rounded-full ${hasUppercase ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+        <span>Al menos 1 mayúscula</span>
+      </div>
+      <div className={`flex items-center gap-2 transition-colors ${hasNumber ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+        <div className={`w-2 h-2 rounded-full ${hasNumber ? 'bg-green-500' : 'bg-muted-foreground/30'}`} />
+        <span>Al menos 1 número</span>
+      </div>
+    </div>
+  )
+}
+
 export default function GestionUsuariosPage() {
   const router = useRouter()
   const { getAllUsers, getAllProfiles, deleteUser, register, updateUser, isInitialized, currentUser, hasPermission, getUserByMatricula } = useDatabase()
@@ -43,9 +69,8 @@ export default function GestionUsuariosPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<UserType | null>(null)
-  const [editConfirmTarget, setEditConfirmTarget] = useState<UserType | null>(null)
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
   const [editingUser, setEditingUser] = useState<UserType | null>(null)
-  const [showEditPermissionsDialog, setShowEditPermissionsDialog] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
   // Create form state
@@ -65,6 +90,7 @@ export default function GestionUsuariosPage() {
 
   // Dialog error state
   const [dialogError, setDialogError] = useState<string | null>(null)
+  const [editError, setEditError] = useState<string | null>(null)
 
   // Filter state
   const [filterName, setFilterName] = useState("")
@@ -80,9 +106,14 @@ export default function GestionUsuariosPage() {
     try {
       const profilesList = await getAllProfiles()
       // Eliminar duplicados por ID y filtrar solo perfiles válidos
-      const uniqueProfiles = Array.from(
+      const uniqueProfilesById = Array.from(
         new Map(profilesList.map(p => [p.id, p])).values()
       ).filter(p => p && p.id && p.name && typeof p.id === 'string' && typeof p.name === 'string')
+
+      // Eliminar duplicados por nombre (mantener el primero)
+      const uniqueProfiles = Array.from(
+        new Map(uniqueProfilesById.map(p => [p.name.toLowerCase(), p])).values()
+      )
       setProfiles(uniqueProfiles)
     } catch (error) {
       console.error('Error loading profiles:', error)
@@ -151,7 +182,7 @@ export default function GestionUsuariosPage() {
   const handleCreateUser = async () => {
     setDialogError(null)
     setStatus(null)
-    
+
     if (!username || !password || !nombreCompleto || !matricula) {
       setDialogError('Todos los campos son requeridos')
       return
@@ -200,36 +231,51 @@ export default function GestionUsuariosPage() {
     setEditProfileId(user.profileId ?? 'profile-operator')
     setEditUsername(user.username)
     setEditPassword("")
+    setEditError(null)
   }
 
   const handleEditSave = async () => {
     if (!editingUser) return
+    setEditError(null)
+
     if (!editNombre?.trim() || !editMatricula?.trim() || !editUsername?.trim()) {
-      setStatus({ success: false, message: 'Nombre, matrícula y nombre de usuario son requeridos' })
+      setEditError('Nombre, matrícula y nombre de usuario son requeridos')
       return
     }
     if (editUsername.length < 3) {
-      setStatus({ success: false, message: 'El nombre de usuario debe tener al menos 3 caracteres' })
-      return
-    }
-    // Validar duplicados: nombre y matrícula
-    const trimmedNombre = editNombre.trim()
-    const trimmedMatricula = editMatricula.trim()
-    const allUsers = await getAllUsers()
-    const duplicateName = allUsers.find(u => u.id !== editingUser.id && u.name.toLowerCase() === trimmedNombre.toLowerCase())
-    if (duplicateName) {
-      setStatus({ success: false, message: 'Ya existe un usuario con ese nombre completo' })
-      return
-    }
-    const duplicateMatricula = await getUserByMatricula(trimmedMatricula)
-    if (duplicateMatricula && duplicateMatricula.id !== editingUser.id) {
-      setStatus({ success: false, message: 'Ya existe un usuario con esa matrícula' })
+      setEditError('El nombre de usuario debe tener al menos 3 caracteres')
       return
     }
 
+    // Validar duplicados: nombre
+    const trimmedNombre = editNombre.trim()
+    const allUsers = await getAllUsers()
+    const duplicateName = allUsers.find(u => u.id !== editingUser.id && u.name.toLowerCase() === trimmedNombre.toLowerCase())
+    if (duplicateName) {
+      setEditError('Ya existe un usuario con ese nombre completo')
+      return
+    }
+
+    setShowSaveConfirm(true)
+  }
+
+  const handleConfirmSave = async () => {
+    if (!editingUser) return
+    setShowSaveConfirm(false)
     setIsProcessing(true)
+    setEditError(null)
     setStatus(null)
     try {
+      const trimmedNombre = editNombre.trim()
+      const trimmedMatricula = editMatricula.trim()
+      // Validar duplicados: matrícula (async check inside try block before saving)
+      const duplicateMatricula = await getUserByMatricula(trimmedMatricula)
+      if (duplicateMatricula && duplicateMatricula.id !== editingUser.id) {
+        setEditError('Ya existe un usuario con esa matrícula')
+        setIsProcessing(false)
+        return
+      }
+
       const updated: UserType = {
         ...editingUser,
         name: trimmedNombre,
@@ -243,7 +289,8 @@ export default function GestionUsuariosPage() {
       if (editPassword.length > 0) {
         const passwordValidation = validatePasswordStrength(editPassword)
         if (!passwordValidation.valid) {
-          setStatus({ success: false, message: passwordValidation.error || 'La contraseña no cumple con los requisitos' })
+          setEditError(passwordValidation.error || 'La contraseña no cumple con los requisitos')
+          setIsProcessing(false)
           return
         }
         updated.passwordHash = await hashPassword(editPassword)
@@ -252,13 +299,10 @@ export default function GestionUsuariosPage() {
       setStatus({ success: true, message: 'Usuario actualizado correctamente' })
       setEditingUser(null)
       await loadUsers()
-      // Mostrar popup para editar permisos después de guardar
-      setEditConfirmTarget(updated)
-      setShowEditPermissionsDialog(true)
     } catch (error) {
       console.error('Error updating user:', error)
       const errorMessage = error instanceof Error ? error.message : 'Error al actualizar usuario'
-      setStatus({ success: false, message: errorMessage })
+      setEditError(errorMessage)
     } finally {
       setIsProcessing(false)
     }
@@ -320,11 +364,10 @@ export default function GestionUsuariosPage() {
         </div>
 
         {status && (
-          <div className={`mb-6 p-4 rounded-lg border ${
-            status.success
-              ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-200'
-              : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-200'
-          }`}>
+          <div className={`mb-6 p-4 rounded-lg border ${status.success
+            ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-200'
+            : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-200'
+            }`}>
             <div className="flex items-center gap-2">
               <span className="font-medium">{status.message}</span>
             </div>
@@ -401,6 +444,7 @@ export default function GestionUsuariosPage() {
                       {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
+                  <PasswordRequirements password={password} />
                 </div>
                 <div>
                   <Label htmlFor="profile">Perfil</Label>
@@ -491,84 +535,84 @@ export default function GestionUsuariosPage() {
             {filteredUsers.map((user) => {
               const isInactive = user.active === false
               return (
-              <Card key={user.id} className={`hover:bg-card/80 transition-colors ${isInactive ? 'opacity-60 bg-muted/30' : ''}`}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {user.profileId === 'profile-superuser' || user.role === 'superuser' ? (
-                        <Shield className="w-5 h-5 text-amber-500" />
-                      ) : (
-                        <User className="w-5 h-5 text-blue-500" />
+                <Card key={user.id} className={`hover:bg-card/80 transition-colors ${isInactive ? 'opacity-60 bg-muted/30' : ''}`}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {user.profileId === 'profile-superuser' || user.role === 'superuser' ? (
+                          <Shield className="w-5 h-5 text-amber-500" />
+                        ) : (
+                          <User className="w-5 h-5 text-blue-500" />
+                        )}
+                        <CardTitle className="text-lg">{user.displayName}</CardTitle>
+                      </div>
+                      {user.id !== currentUser?.id && user.id !== KRAKENROV_USER_ID && (
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditClick(user)}
+                            disabled={isProcessing}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleToggleActive(user)}
+                            disabled={isProcessing}
+                            title={user.active === false ? 'Activar usuario' : 'Desactivar usuario'}
+                          >
+                            {user.active === false ? (
+                              <User className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <User className="w-4 h-4 text-gray-400" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeleteTarget(user)}
+                            disabled={isProcessing}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       )}
-                      <CardTitle className="text-lg">{user.displayName}</CardTitle>
                     </div>
-                    {user.id !== currentUser?.id && user.id !== KRAKENROV_USER_ID && (
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditClick(user)}
-                          disabled={isProcessing}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleActive(user)}
-                          disabled={isProcessing}
-                          title={user.active === false ? 'Activar usuario' : 'Desactivar usuario'}
-                        >
-                          {user.active === false ? (
-                            <User className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <User className="w-4 h-4 text-gray-400" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteTarget(user)}
-                          disabled={isProcessing}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="font-medium text-muted-foreground">Usuario:</span>
+                        <p className="text-foreground">{user.username}</p>
                       </div>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="font-medium text-muted-foreground">Usuario:</span>
-                      <p className="text-foreground">{user.username}</p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-muted-foreground">Perfil:</span>
-                      <p className="text-foreground">{profileName(user.profileId ?? '') || (user.role === 'superuser' ? 'Super Usuario' : 'Operador')}</p>
-                    </div>
-                    {isInactive && (
-                      <div className="pt-2 border-t">
-                        <span className="text-xs font-medium text-muted-foreground">Estado: Desactivado</span>
+                      <div>
+                        <span className="font-medium text-muted-foreground">Perfil:</span>
+                        <p className="text-foreground">{profileName(user.profileId ?? '') || (user.role === 'superuser' ? 'Super Usuario' : 'Operador')}</p>
                       </div>
-                    )}
-                    <div>
-                      <span className="font-medium text-muted-foreground">Matrícula:</span>
-                      <p className="text-foreground">{user.matricula}</p>
+                      {isInactive && (
+                        <div className="pt-2 border-t">
+                          <span className="text-xs font-medium text-muted-foreground">Estado: Desactivado</span>
+                        </div>
+                      )}
+                      <div>
+                        <span className="font-medium text-muted-foreground">Matrícula:</span>
+                        <p className="text-foreground">{user.matricula}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-muted-foreground">Creado:</span>
+                        <p className="text-foreground">{new Date(user.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-muted-foreground">Modificado:</span>
+                        <p className="text-foreground">{user.updatedAt ? new Date(user.updatedAt).toLocaleDateString() : '-'}</p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium text-muted-foreground">Creado:</span>
-                      <p className="text-foreground">{new Date(user.createdAt).toLocaleDateString()}</p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-muted-foreground">Modificado:</span>
-                      <p className="text-foreground">{user.updatedAt ? new Date(user.updatedAt).toLocaleDateString() : '-'}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
+                  </CardContent>
+                </Card>
+              )
             })}
           </div>
         )}
@@ -589,6 +633,11 @@ export default function GestionUsuariosPage() {
                 Modifique los datos del usuario. Deje la contraseña en blanco para no cambiarla.
               </DialogDescription>
             </DialogHeader>
+            {editError && (
+              <div className="mt-4 p-3 rounded-lg border bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-200">
+                <span className="text-sm font-medium">{editError}</span>
+              </div>
+            )}
             <div className="space-y-4 mt-4">
               <div>
                 <Label htmlFor="editNombre">Nombre completo</Label>
@@ -621,7 +670,7 @@ export default function GestionUsuariosPage() {
                   <Input
                     id="editPassword"
                     type={editShowPassword ? "text" : "password"}
-                      placeholder="Mínimo 8 caracteres, 1 mayúscula y 1 número"
+                    placeholder="Mínimo 8 caracteres, 1 mayúscula y 1 número"
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
                     className="pr-10"
@@ -634,6 +683,7 @@ export default function GestionUsuariosPage() {
                     {editShowPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                <PasswordRequirements password={editPassword} />
               </div>
               <div className="flex gap-2 pt-4">
                 <Button onClick={handleEditSave} disabled={isProcessing} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -647,31 +697,17 @@ export default function GestionUsuariosPage() {
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={showEditPermissionsDialog} onOpenChange={(open) => {
-          if (!open) {
-            setShowEditPermissionsDialog(false)
-            setEditConfirmTarget(null)
-          }
-        }}>
+        <AlertDialog open={showSaveConfirm} onOpenChange={setShowSaveConfirm}>
           <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Editar permisos</AlertDialogTitle>
+            <AlertDialogHeader className="cursor-move">
+              <AlertDialogTitle>Guardar cambios</AlertDialogTitle>
               <AlertDialogDescription>
-                ¿Desea editar los permisos de este usuario?
+                ¿Seguro de guardar los nuevos cambios?
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => {
-                setShowEditPermissionsDialog(false)
-                setEditConfirmTarget(null)
-              }}>No</AlertDialogCancel>
-              <AlertDialogAction onClick={() => {
-                setShowEditPermissionsDialog(false)
-                if (editConfirmTarget) {
-                  router.push('/gestion-perfiles')
-                }
-                setEditConfirmTarget(null)
-              }}>Sí, editar permisos</AlertDialogAction>
+              <AlertDialogCancel onClick={() => setShowSaveConfirm(false)}>No</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmSave}>Sí</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

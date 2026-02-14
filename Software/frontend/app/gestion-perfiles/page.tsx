@@ -82,9 +82,7 @@ export default function GestionPerfilesPage() {
   const [formPermissions, setFormPermissions] = useState<Record<keyof ProfilePermissions, boolean>>(DEFAULT_PERMISSIONS)
   const [isProcessing, setIsProcessing] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null)
-  const [editConfirmTarget, setEditConfirmTarget] = useState<Profile | null>(null)
-  const [showEditPermissionsDialog, setShowEditPermissionsDialog] = useState(false)
-  const [isEditingFromDialog, setIsEditingFromDialog] = useState(false)
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false)
   const [statusMessage, setStatusMessage] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
@@ -128,12 +126,12 @@ export default function GestionPerfilesPage() {
     setCreateOpen(true)
   }
 
-  const handleSave = async () => {
+  const handleSaveClick = () => {
     if (!formName.trim()) {
       setStatusMessage({ success: false, message: 'El nombre del perfil es requerido' })
       return
     }
-    
+
     // Validar que no haya perfiles duplicados
     const trimmedName = formName.trim()
     const existingProfile = profiles.find(p => p.name.toLowerCase() === trimmedName.toLowerCase() && p.id !== editProfile?.id)
@@ -141,13 +139,18 @@ export default function GestionPerfilesPage() {
       setStatusMessage({ success: false, message: 'Ya existe un perfil con ese nombre' })
       return
     }
-    
+
+    setShowSaveConfirm(true)
+  }
+
+  const handleConfirmSave = async () => {
+    setShowSaveConfirm(false)
     setIsProcessing(true)
     setStatusMessage(null)
     try {
       const now = new Date().toISOString()
       const permissions = permissionsFromForm(formPermissions)
-      const wasEditing = !!editProfile
+      const trimmedName = formName.trim()
       let savedProfile: Profile
       if (editProfile) {
         savedProfile = {
@@ -172,13 +175,6 @@ export default function GestionPerfilesPage() {
       setCreateOpen(false)
       setEditProfile(null)
       await loadProfiles()
-      // Mostrar popup para editar permisos después de guardar (solo si se editó un perfil y no viene del popup)
-      if (wasEditing && !isEditingFromDialog) {
-        setEditConfirmTarget(savedProfile)
-        setShowEditPermissionsDialog(true)
-      } else {
-        setIsEditingFromDialog(false)
-      }
     } catch (e) {
       console.error(e)
       setStatusMessage({ success: false, message: 'Error al guardar el perfil' })
@@ -262,9 +258,8 @@ export default function GestionPerfilesPage() {
 
         {statusMessage && (
           <div
-            className={`mb-6 p-4 rounded-lg border ${
-              statusMessage.success ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-200' : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-200'
-            }`}
+            className={`mb-6 p-4 rounded-lg border ${statusMessage.success ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-200' : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-200'
+              }`}
           >
             <span className="font-medium">{statusMessage.message}</span>
           </div>
@@ -281,45 +276,48 @@ export default function GestionPerfilesPage() {
           <p className="text-muted-foreground text-center py-8">Cargando perfiles...</p>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {profiles.map((profile) => (
-              <Card key={profile.id} className="hover:bg-card/80 transition-colors">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-5 h-5 text-primary" />
-                      <CardTitle className="text-lg">{profile.name}</CardTitle>
+            {profiles.map((profile) => {
+              const isPreset = profile.id === PROFILE_OPERATOR_ID || profile.id === PROFILE_SUPERUSER_ID
+              return (
+                <Card key={profile.id} className="hover:bg-card/80 transition-colors">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Shield className={`w-5 h-5 ${isPreset ? 'text-accent' : 'text-primary'}`} />
+                        <CardTitle className="text-lg">{profile.name}</CardTitle>
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="text-sm text-muted-foreground">
-                    <p>Creación: {new Date(profile.createdAt).toLocaleDateString()}</p>
-                    <p>Última modificación: {new Date(profile.updatedAt).toLocaleDateString()}</p>
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditClick(profile)}
-                      disabled={isProcessing}
-                    >
-                      <Pencil className="w-4 h-4 mr-1" />
-                      Editar permisos
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteClick(profile)}
-                      disabled={isProcessing || profile.id === PROFILE_OPERATOR_ID || profile.id === PROFILE_SUPERUSER_ID}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Eliminar perfil
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="text-sm text-muted-foreground">
+                      <p>Creación: {new Date(profile.createdAt).toLocaleDateString()}</p>
+                      <p>Última modificación: {new Date(profile.updatedAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditClick(profile)}
+                        disabled={isProcessing}
+                      >
+                        <Pencil className="w-4 h-4 mr-1" />
+                        Editar permisos
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteClick(profile)}
+                        disabled={isProcessing || profile.id === PROFILE_OPERATOR_ID || profile.id === PROFILE_SUPERUSER_ID}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Eliminar perfil
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
 
@@ -358,7 +356,7 @@ export default function GestionPerfilesPage() {
                 ))}
               </div>
               <div className="flex gap-2 pt-4">
-                <Button onClick={handleSave} disabled={isProcessing} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button onClick={handleSaveClick} disabled={isProcessing} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
                   {isProcessing ? 'Guardando...' : editProfile ? 'Guardar cambios' : 'Crear perfil'}
                 </Button>
                 <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isProcessing}>
@@ -369,35 +367,17 @@ export default function GestionPerfilesPage() {
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={showEditPermissionsDialog} onOpenChange={(open) => {
-          if (!open) {
-            setShowEditPermissionsDialog(false)
-            setEditConfirmTarget(null)
-          }
-        }}>
+        <AlertDialog open={showSaveConfirm} onOpenChange={setShowSaveConfirm}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Editar permisos</AlertDialogTitle>
+              <AlertDialogTitle>Guardar cambios</AlertDialogTitle>
               <AlertDialogDescription>
-                ¿Desea continuar editando los permisos de este perfil?
+                ¿Seguro de guardar los nuevos cambios?
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => {
-                setShowEditPermissionsDialog(false)
-                setEditConfirmTarget(null)
-              }}>No</AlertDialogCancel>
-              <AlertDialogAction onClick={() => {
-                setShowEditPermissionsDialog(false)
-                if (editConfirmTarget) {
-                  setIsEditingFromDialog(true)
-                  setFormName(editConfirmTarget.name)
-                  setFormPermissions(formFromPermissions(editConfirmTarget.permissions))
-                  setEditProfile(editConfirmTarget)
-                  setCreateOpen(true)
-                }
-                setEditConfirmTarget(null)
-              }}>Sí, editar permisos</AlertDialogAction>
+              <AlertDialogCancel onClick={() => setShowSaveConfirm(false)}>No</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmSave}>Sí</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
