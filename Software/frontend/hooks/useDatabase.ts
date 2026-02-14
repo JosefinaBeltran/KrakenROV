@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { localDB, User, Session, InspeccionData, TempInspeccionData } from '@/lib/database'
+import { localDB, User, Session, InspeccionData, TempInspeccionData, Profile, ProfilePermissions } from '@/lib/database'
 import { backupService } from '@/lib/backupService'
 import { getPredefinedUsers, DEFAULT_PASSWORDS, USER_PERMISSIONS, UserRole } from '@/lib/users'
 import { hashPassword, verifyPassword } from '@/lib/password'
@@ -8,6 +8,7 @@ export function useDatabase() {
   const [isInitialized, setIsInitialized] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentUserPermissions, setCurrentUserPermissions] = useState<ProfilePermissions | null>(null)
 
   useEffect(() => {
     const initDB = async () => {
@@ -41,12 +42,19 @@ export function useDatabase() {
           await localDB.saveUser(user)
           console.log('Initialized predefined user:', user.username)
         } else {
-          // Update existing user if passwordHash or matricula is missing
-          if (!existingUser.passwordHash || !existingUser.matricula) {
-            const updatedUser = {
+          // Update existing user if passwordHash, matricula, profileId or updatedAt is missing
+          const needsUpdate =
+            !existingUser.passwordHash ||
+            !existingUser.matricula ||
+            !existingUser.profileId ||
+            !existingUser.updatedAt
+          if (needsUpdate) {
+            const updatedUser: User = {
               ...existingUser,
               passwordHash: existingUser.passwordHash || user.passwordHash,
-              matricula: existingUser.matricula || user.matricula
+              matricula: existingUser.matricula || user.matricula,
+              profileId: existingUser.profileId ?? user.profileId,
+              updatedAt: existingUser.updatedAt ?? user.updatedAt ?? new Date().toISOString()
             }
             await localDB.saveUser(updatedUser)
             console.log('Updated predefined user:', user.username)
@@ -70,14 +78,22 @@ export function useDatabase() {
         console.log('Found user by ID:', user)
         if (user) {
           setCurrentUser(user)
+          if (user.profileId) {
+            const profile = await localDB.getProfileById(user.profileId)
+            setCurrentUserPermissions(profile?.permissions ?? null)
+          } else {
+            setCurrentUserPermissions(null)
+          }
           console.log('Successfully loaded current user:', user.username, 'with role:', user.role)
         } else {
           console.error('User not found for session userId:', session.userId)
           setCurrentUser(null)
+          setCurrentUserPermissions(null)
         }
       } else {
         console.log('No active session found')
         setCurrentUser(null)
+        setCurrentUserPermissions(null)
       }
     } catch (error) {
       console.error('Error loading current user:', error)
@@ -140,7 +156,12 @@ export function useDatabase() {
 
       await localDB.saveSession(session)
       setCurrentUser(user)
-      
+      if (user.profileId) {
+        const profile = await localDB.getProfileById(user.profileId)
+        setCurrentUserPermissions(profile?.permissions ?? null)
+      } else {
+        setCurrentUserPermissions(null)
+      }
       console.log('User logged in:', user.username, 'with role:', user.role)
       return { success: true, user }
       
@@ -153,12 +174,13 @@ export function useDatabase() {
     }
   }, [isInitialized])
 
-  // Register new user
+  // Register new user (profileId optional; defaults to operator profile)
   const register = useCallback(async (
     username: string,
     password: string,
     nombreCompleto: string,
-    matricula: string
+    matricula: string,
+    profileId?: string
   ): Promise<{ success: boolean; user?: User; error?: string }> => {
     if (!isInitialized) {
       return { success: false, error: 'Database not initialized' }
@@ -193,16 +215,19 @@ export function useDatabase() {
       // Hash password
       const passwordHash = await hashPassword(password)
 
-      // Create new user
+      const now = new Date().toISOString()
+      // Create new user (role derived from profile for legacy; new users use profileId)
       const newUser: User = {
         id: `user-${Date.now()}`,
         username,
         name: nombreCompleto,
         displayName: nombreCompleto,
-        role: 'operator', // New users are operators by default
+        role: profileId ? (profileId === 'profile-superuser' ? 'superuser' : 'operator') : 'operator',
         passwordHash,
         matricula,
-        createdAt: new Date().toISOString()
+        profileId: profileId ?? 'profile-operator',
+        createdAt: now,
+        updatedAt: now
       }
 
       // Save user to database
@@ -225,12 +250,12 @@ export function useDatabase() {
     return USER_PERMISSIONS[userRole] || USER_PERMISSIONS.operator
   }, [])
 
-  // Check if user has permission
+  // Check if user has permission (from profile if profileId, else from legacy role)
   const hasPermission = useCallback((permission: keyof typeof USER_PERMISSIONS.superuser) => {
     if (!currentUser) return false
-    const permissions = getUserPermissions(currentUser.role)
-    return permissions[permission]
-  }, [currentUser, getUserPermissions])
+    if (currentUserPermissions) return currentUserPermissions[permission]
+    return getUserPermissions(currentUser.role)[permission]
+  }, [currentUser, currentUserPermissions, getUserPermissions])
 
   const getUser = useCallback(async (username: string) => {
     if (!isInitialized) return null
@@ -240,6 +265,38 @@ export function useDatabase() {
   const getAllUsers = useCallback(async () => {
     if (!isInitialized) return []
     return await localDB.getAllUsers()
+  }, [isInitialized])
+
+  const updateUser = useCallback(async (user: User) => {
+    if (!isInitialized) return
+    const withUpdated = { ...user, updatedAt: new Date().toISOString() }
+    await localDB.saveUser(withUpdated)
+  }, [isInitialized])
+
+  // Profile operations
+  const getAllProfiles = useCallback(async () => {
+    if (!isInitialized) return []
+    return await localDB.getAllProfiles()
+  }, [isInitialized])
+
+  const getProfileById = useCallback(async (id: string) => {
+    if (!isInitialized) return null
+    return await localDB.getProfileById(id)
+  }, [isInitialized])
+
+  const saveProfile = useCallback(async (profile: Profile) => {
+    if (!isInitialized) return
+    await localDB.saveProfile(profile)
+  }, [isInitialized])
+
+  const deleteProfile = useCallback(async (id: string) => {
+    if (!isInitialized) return
+    await localDB.deleteProfile(id)
+  }, [isInitialized])
+
+  const getUsersByProfileId = useCallback(async (profileId: string) => {
+    if (!isInitialized) return []
+    return await localDB.getUsersByProfileId(profileId)
   }, [isInitialized])
 
   const deleteUser = useCallback(async (userId: string) => {
@@ -289,6 +346,7 @@ export function useDatabase() {
     if (!isInitialized) return
     await localDB.clearSession()
     setCurrentUser(null)
+    setCurrentUserPermissions(null)
     console.log('Session cleared and currentUser reset')
   }, [isInitialized])
 
@@ -325,12 +383,12 @@ export function useDatabase() {
       console.log('No current user, returning empty array for inspecciones')
       return []
     }
-    
-    console.log('Getting inspecciones for user:', currentUser.username, 'with role:', currentUser.role)
-    const data = await localDB.getInspeccionesByUser(currentUser.id, currentUser.role)
+    const effectiveRole = currentUserPermissions?.canViewAllInspecciones ? 'superuser' : currentUser.role
+    console.log('Getting inspecciones for user:', currentUser.username, 'with role:', effectiveRole)
+    const data = await localDB.getInspeccionesByUser(currentUser.id, effectiveRole)
     console.log('Retrieved inspecciones from database:', data.length)
     return data
-  }, [isInitialized, currentUser])
+  }, [isInitialized, currentUser, currentUserPermissions])
 
   const getInspeccionById = useCallback(async (id: string) => {
     if (!isInitialized) {
@@ -483,9 +541,15 @@ export function useDatabase() {
     getUserPermissions,
     hasPermission,
     saveUser,
+    updateUser,
     getUser,
     getAllUsers,
     deleteUser,
+    getAllProfiles,
+    getProfileById,
+    saveProfile,
+    deleteProfile,
+    getUsersByProfileId,
     saveSession,
     getActiveSession,
     clearSession,

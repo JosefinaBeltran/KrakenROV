@@ -6,6 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Download, Upload, Trash2 } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import { useState, useRef } from "react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function GestionDatosPage() {
   const router = useRouter()
@@ -13,6 +23,8 @@ export default function GestionDatosPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importConfirm, setImportConfirm] = useState<{ file: File; info: { filename: string; backupDate: string; totalInspecciones: number; size: number } } | null>(null)
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
 
   const handleExportData = async () => {
     if (!isInitialized) return
@@ -45,126 +57,74 @@ export default function GestionDatosPage() {
     }
   }
 
-  const handleImportData = async () => {
+  const handleImportFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isInitialized) return
-    
-    const fileInput = fileInputRef.current
-    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-      setStatus({
-        success: false,
-        message: 'Por favor selecciona un archivo de backup'
-      })
-      return
-    }
-    
+    const fileInput = e.target
+    if (!fileInput.files || fileInput.files.length === 0) return
     const file = fileInput.files[0]
-    
+    setStatus(null)
+    try {
+      const infoResult = await getBackupInfo(file)
+      if (!infoResult.success) {
+        setStatus({ success: false, message: `Error al leer el archivo: ${infoResult.error}` })
+        fileInput.value = ''
+        return
+      }
+      setImportConfirm({ file, info: infoResult.info })
+    } catch (error) {
+      console.error('Import info error:', error)
+      setStatus({ success: false, message: 'Error al leer el archivo' })
+    }
+    fileInput.value = ''
+  }
+
+  const handleImportConfirm = async () => {
+    if (!importConfirm) return
     setIsProcessing(true)
     setStatus(null)
-    
     try {
-      // First get backup info
-      const infoResult = await getBackupInfo(file)
-      
-      if (!infoResult.success) {
-        setStatus({
-          success: false,
-          message: `Error al leer el archivo: ${infoResult.error}`
-        })
-        return
-      }
-      
-      // Confirm import
-      const confirmMessage = `¿Estás seguro de que quieres importar este backup?\n\n` +
-        `Archivo: ${infoResult.info.filename}\n` +
-        `Fecha: ${new Date(infoResult.info.backupDate).toLocaleString()}\n` +
-        `Inspecciones: ${infoResult.info.totalInspecciones}\n` +
-        `Tamaño: ${(infoResult.info.size / 1024).toFixed(1)} KB\n\n` +
-        `Esto reemplazará los datos existentes.`
-      
-      if (!confirm(confirmMessage)) {
-        setStatus({
-          success: false,
-          message: 'Importación cancelada'
-        })
-        return
-      }
-      
-      // Import data
-      const result = await importData(file)
-      
+      const result = await importData(importConfirm.file)
       if (result.success) {
         let message = `Datos importados exitosamente. ${result.importedCount || 0} inspección(es) importada(s).`
         if (result.failedInspecciones && result.failedInspecciones.length > 0) {
           message += ` ${result.failedInspecciones.length} inspección(es) no se pudieron importar.`
         }
-        setStatus({
-          success: true,
-          message
-        })
+        setStatus({ success: true, message })
       } else {
         let errorMessage = result.error || 'Error desconocido'
         if (result.importedCount && result.importedCount > 0) {
           errorMessage = `${errorMessage} ${result.importedCount} inspección(es) se importaron antes del error.`
         }
-        setStatus({
-          success: false,
-          message: errorMessage
-        })
+        setStatus({ success: false, message: errorMessage })
       }
     } catch (error) {
       console.error('Import error:', error)
-      setStatus({
-        success: false,
-        message: 'Error al importar los datos'
-      })
+      setStatus({ success: false, message: 'Error al importar los datos' })
     } finally {
       setIsProcessing(false)
-      // Clear file input
-      if (fileInput) {
-        fileInput.value = ''
-      }
+      setImportConfirm(null)
     }
   }
 
-  const handleClearAllData = async () => {
+  const handleImportCancel = () => {
+    setImportConfirm(null)
+  }
+
+  const handleClearAllDataConfirm = async () => {
     if (!isInitialized) return
-    
-    const confirmMessage = '¿Estás seguro de que quieres eliminar TODOS los datos?\n\n' +
-      'Esta acción no se puede deshacer.\n' +
-      'Se eliminarán todas las inspecciones, imágenes y videos.'
-    
-    if (!confirm(confirmMessage)) {
-      setStatus({
-        success: false,
-        message: 'Eliminación cancelada'
-      })
-      return
-    }
-    
+    setClearConfirmOpen(false)
     setIsProcessing(true)
     setStatus(null)
-    
     try {
       const result = await clearAllData()
-      
       if (result.success) {
-        setStatus({
-          success: true,
-          message: 'Todos los datos han sido eliminados exitosamente'
-        })
+        setStatus({ success: true, message: 'Todos los datos han sido eliminados exitosamente' })
       } else {
-        setStatus({
-          success: false,
-          message: `Error al eliminar datos: ${result.error || 'Error desconocido'}`
-        })
+        setStatus({ success: false, message: `Error al eliminar datos: ${result.error || 'Error desconocido'}` })
       }
     } catch (error) {
       console.error('Clear data error:', error)
-      setStatus({
-        success: false,
-        message: 'Error al eliminar los datos'
-      })
+      setStatus({ success: false, message: 'Error al eliminar los datos' })
     } finally {
       setIsProcessing(false)
     }
@@ -268,7 +228,7 @@ export default function GestionDatosPage() {
                 type="file"
                 accept=".json"
                 className="hidden"
-                onChange={handleImportData}
+                onChange={handleImportFileSelect}
                 aria-label="Seleccionar archivo de backup"
               />
               <div className="mt-auto">
@@ -308,7 +268,7 @@ export default function GestionDatosPage() {
                 </p>
                 <div className="mt-auto">
                   <Button 
-                    onClick={handleClearAllData}
+                    onClick={() => setClearConfirmOpen(true)}
                     disabled={isProcessing || !isInitialized}
                     className="w-full"
                     variant="outline"
@@ -330,6 +290,49 @@ export default function GestionDatosPage() {
             </Card>
           )}
         </div>
+
+        <AlertDialog open={!!importConfirm} onOpenChange={(open) => !open && setImportConfirm(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar importación</AlertDialogTitle>
+              <AlertDialogDescription>
+                {importConfirm && (
+                  <>
+                    ¿Está seguro de que desea importar este backup?
+                    <br /><br />
+                    Archivo: {importConfirm.info.filename}<br />
+                    Fecha: {new Date(importConfirm.info.backupDate).toLocaleString()}<br />
+                    Inspecciones: {importConfirm.info.totalInspecciones}<br />
+                    Tamaño: {(importConfirm.info.size / 1024).toFixed(1)} KB
+                    <br /><br />
+                    Esto reemplazará los datos existentes.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => { setImportConfirm(null); setStatus({ success: false, message: 'Importación cancelada' }); }}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleImportConfirm} disabled={isProcessing}>Importar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eliminar todos los datos</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Está seguro de que desea eliminar TODOS los datos? Esta acción no se puede deshacer. Se eliminarán todas las inspecciones, imágenes y videos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleClearAllDataConfirm} disabled={isProcessing} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Eliminar todo
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

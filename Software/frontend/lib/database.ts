@@ -1,6 +1,26 @@
 // Database schema and operations for local SQLite database
 // This replaces localStorage functionality with a proper database
 
+// Profile permissions (same keys as USER_PERMISSIONS in lib/users.ts)
+export interface ProfilePermissions {
+  canCreateInspecciones: boolean
+  canViewAllInspecciones: boolean
+  canEditAllInspecciones: boolean
+  canDeleteInspecciones: boolean
+  canExportData: boolean
+  canImportData: boolean
+  canManageUsers: boolean
+  canClearAllData: boolean
+}
+
+export interface Profile {
+  id: string
+  name: string
+  permissions: ProfilePermissions
+  createdAt: string
+  updatedAt: string
+}
+
 export interface User {
   id: string
   username: string
@@ -9,7 +29,9 @@ export interface User {
   displayName: string
   passwordHash: string
   matricula: string
+  profileId?: string
   createdAt: string
+  updatedAt?: string
 }
 
 export interface Session {
@@ -56,10 +78,35 @@ export interface TempInspeccionData {
   createdAt: string
 }
 
+// Default profile permissions (mirrors USER_PERMISSIONS in lib/users.ts to avoid circular dependency)
+const DEFAULT_SUPERUSER_PERMISSIONS: ProfilePermissions = {
+  canViewAllInspecciones: true,
+  canCreateInspecciones: true,
+  canEditAllInspecciones: true,
+  canDeleteInspecciones: true,
+  canExportData: true,
+  canImportData: true,
+  canManageUsers: true,
+  canClearAllData: true
+}
+const DEFAULT_OPERATOR_PERMISSIONS: ProfilePermissions = {
+  canViewAllInspecciones: false,
+  canCreateInspecciones: true,
+  canEditAllInspecciones: false,
+  canDeleteInspecciones: false,
+  canExportData: false,
+  canImportData: false,
+  canManageUsers: false,
+  canClearAllData: false
+}
+
+const PROFILE_SUPERUSER_ID = 'profile-superuser'
+const PROFILE_OPERATOR_ID = 'profile-operator'
+
 class LocalDatabase {
   private db: IDBDatabase | null = null
   private dbName = 'KrakenROV_DB'
-  private version = 2
+  private version = 3
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -79,6 +126,7 @@ class LocalDatabase {
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result
         const transaction = (event.target as IDBOpenDBRequest).transaction
+        const oldVersion = (event.target as IDBOpenDBRequest).oldVersion
 
         // Users table
         if (!db.objectStoreNames.contains('users')) {
@@ -92,9 +140,47 @@ class LocalDatabase {
             try {
               userStore.createIndex('matricula', 'matricula', { unique: false })
             } catch (error) {
-              // Index might already exist, ignore error
               console.log('Matricula index may already exist')
             }
+          }
+        }
+
+        // Profiles table (version 3)
+        if (!db.objectStoreNames.contains('profiles')) {
+          const profileStore = db.createObjectStore('profiles', { keyPath: 'id' })
+          profileStore.createIndex('name', 'name', { unique: false })
+          const now = new Date().toISOString()
+          profileStore.put({
+            id: PROFILE_SUPERUSER_ID,
+            name: 'Super Usuario',
+            permissions: DEFAULT_SUPERUSER_PERMISSIONS,
+            createdAt: now,
+            updatedAt: now
+          } as Profile)
+          profileStore.put({
+            id: PROFILE_OPERATOR_ID,
+            name: 'Operador',
+            permissions: DEFAULT_OPERATOR_PERMISSIONS,
+            createdAt: now,
+            updatedAt: now
+          } as Profile)
+        }
+
+        // Migrate existing users: add profileId and updatedAt (version 2 -> 3)
+        if (oldVersion === 2 && db.objectStoreNames.contains('users') && transaction) {
+          const userStore = transaction.objectStore('users')
+          const req = userStore.getAll()
+          req.onsuccess = () => {
+            const users: User[] = req.result || []
+            const now = new Date().toISOString()
+            users.forEach((u) => {
+              const migrated: User = {
+                ...u,
+                profileId: u.profileId ?? (u.role === 'superuser' ? PROFILE_SUPERUSER_ID : PROFILE_OPERATOR_ID),
+                updatedAt: u.updatedAt ?? u.createdAt ?? now
+              }
+              userStore.put(migrated)
+            })
           }
         }
 
@@ -136,11 +222,53 @@ class LocalDatabase {
     return transaction.objectStore(storeName)
   }
 
+  // Profile operations
+  async saveProfile(profile: Profile): Promise<void> {
+    const store = await this.getStore('profiles', 'readwrite')
+    return new Promise((resolve, reject) => {
+      const request = store.put(profile)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getAllProfiles(): Promise<Profile[]> {
+    const store = await this.getStore('profiles')
+    return new Promise((resolve, reject) => {
+      const request = store.getAll()
+      request.onsuccess = () => resolve(request.result || [])
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getProfileById(id: string): Promise<Profile | null> {
+    const store = await this.getStore('profiles')
+    return new Promise((resolve, reject) => {
+      const request = store.get(id)
+      request.onsuccess = () => resolve(request.result || null)
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async deleteProfile(id: string): Promise<void> {
+    const store = await this.getStore('profiles', 'readwrite')
+    return new Promise((resolve, reject) => {
+      const request = store.delete(id)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
   // User operations
   async saveUser(user: User): Promise<void> {
+    const now = new Date().toISOString()
+    const userToSave: User = {
+      ...user,
+      updatedAt: user.updatedAt ?? now
+    }
     const store = await this.getStore('users', 'readwrite')
     return new Promise((resolve, reject) => {
-      const request = store.put(user)
+      const request = store.put(userToSave)
       request.onsuccess = () => resolve()
       request.onerror = () => reject(request.error)
     })
@@ -172,6 +300,11 @@ class LocalDatabase {
       request.onsuccess = () => resolve(request.result || [])
       request.onerror = () => reject(request.error)
     })
+  }
+
+  async getUsersByProfileId(profileId: string): Promise<User[]> {
+    const users = await this.getAllUsers()
+    return users.filter((u) => u.profileId === profileId)
   }
 
   async getUserByMatricula(matricula: string): Promise<User | null> {

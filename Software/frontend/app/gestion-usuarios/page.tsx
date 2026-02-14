@@ -3,11 +3,12 @@
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, UserPlus, Trash2, Shield, User } from "lucide-react"
+import { ArrowLeft, UserPlus, Trash2, Pencil, Shield, User } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import { useState, useEffect } from "react"
 import { User as UserType } from "@/lib/database"
-import { localDB } from "@/lib/database"
+import { Profile } from "@/lib/database"
+import { hashPassword } from "@/lib/password"
 import {
   Dialog,
   DialogContent,
@@ -20,27 +21,58 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Eye, EyeOff } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function GestionUsuariosPage() {
   const router = useRouter()
-  const { getAllUsers, deleteUser, register, isInitialized, currentUser, hasPermission } = useDatabase()
+  const { getAllUsers, getAllProfiles, deleteUser, register, updateUser, isInitialized, currentUser, hasPermission } = useDatabase()
   const [users, setUsers] = useState<UserType[]>([])
+  const [profiles, setProfiles] = useState<Profile[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null)
-  
-  // Form state
+  const [deleteTarget, setDeleteTarget] = useState<UserType | null>(null)
+  const [editConfirmTarget, setEditConfirmTarget] = useState<UserType | null>(null)
+  const [editingUser, setEditingUser] = useState<UserType | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+
+  // Create form state
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [nombreCompleto, setNombreCompleto] = useState("")
   const [matricula, setMatricula] = useState("")
-  const [role, setRole] = useState<"superuser" | "operator">("operator")
-  const [showPassword, setShowPassword] = useState(false)
+  const [profileId, setProfileId] = useState("")
+
+  // Edit form state
+  const [editNombre, setEditNombre] = useState("")
+  const [editMatricula, setEditMatricula] = useState("")
+  const [editProfileId, setEditProfileId] = useState("")
+  const [editUsername, setEditUsername] = useState("")
+  const [editPassword, setEditPassword] = useState("")
+  const [editShowPassword, setEditShowPassword] = useState(false)
 
   useEffect(() => {
+    if (!isInitialized) return
     loadUsers()
+    getAllProfiles().then(setProfiles)
   }, [isInitialized])
+
+  useEffect(() => {
+    if (profiles.length > 0 && !profileId) {
+      const defaultProfile = profiles.find((p) => p.id === 'profile-operator') ?? profiles[0]
+      setProfileId(defaultProfile.id)
+    }
+  }, [profiles, profileId])
 
   const loadUsers = async () => {
     if (!isInitialized) return
@@ -58,6 +90,8 @@ export default function GestionUsuariosPage() {
       setIsLoading(false)
     }
   }
+
+  const profileName = (id: string) => profiles.find((p) => p.id === id)?.name ?? id
 
   const handleCreateUser = async () => {
     setStatus(null)
@@ -88,84 +122,101 @@ export default function GestionUsuariosPage() {
 
     setIsProcessing(true)
     try {
-      const result = await register(username, password, nombreCompleto, matricula)
-      
+      const result = await register(username, password, nombreCompleto, matricula, profileId || undefined)
       if (result.success && result.user) {
-        // Update role if needed (since register creates operator by default)
-        if (role === 'superuser') {
-          const updatedUser = { ...result.user, role: 'superuser' as const }
-          await localDB.saveUser(updatedUser)
-        }
-        
-        setStatus({
-          success: true,
-          message: 'Usuario creado exitosamente'
-        })
-        
-        // Reset form
+        setStatus({ success: true, message: 'Usuario creado exitosamente' })
         setUsername("")
         setPassword("")
         setNombreCompleto("")
         setMatricula("")
-        setRole("operator")
+        setProfileId(profiles[0]?.id ?? '')
         setIsDialogOpen(false)
-        
-        // Reload users
         await loadUsers()
       } else {
-        setStatus({
-          success: false,
-          message: result.error || 'Error al crear usuario'
-        })
+        setStatus({ success: false, message: result.error || 'Error al crear usuario' })
       }
     } catch (error) {
       console.error('Error creating user:', error)
-      setStatus({
-        success: false,
-        message: 'Error al crear usuario'
-      })
+      setStatus({ success: false, message: 'Error al crear usuario' })
     } finally {
       setIsProcessing(false)
     }
   }
 
-  const handleDeleteUser = async (userId: string, username: string) => {
-    const confirmMessage = `¿Estás seguro de que quieres eliminar al usuario "${username}"?\n\nEsta acción no se puede deshacer.`
-    
-    if (!confirm(confirmMessage)) {
+  const handleEditClick = (user: UserType) => {
+    setEditConfirmTarget(user)
+  }
+
+  const handleEditConfirmProceed = () => {
+    if (!editConfirmTarget) return
+    setEditingUser(editConfirmTarget)
+    setEditNombre(editConfirmTarget.name)
+    setEditMatricula(editConfirmTarget.matricula)
+    setEditProfileId(editConfirmTarget.profileId ?? 'profile-operator')
+    setEditUsername(editConfirmTarget.username)
+    setEditPassword("")
+    setEditConfirmTarget(null)
+  }
+
+  const handleEditSave = async () => {
+    if (!editingUser) return
+    if (!editNombre?.trim() || !editMatricula?.trim() || !editUsername?.trim()) {
+      setStatus({ success: false, message: 'Nombre, matrícula y nombre de usuario son requeridos' })
       return
     }
-
+    if (editUsername.length < 3) {
+      setStatus({ success: false, message: 'El nombre de usuario debe tener al menos 3 caracteres' })
+      return
+    }
     setIsProcessing(true)
     setStatus(null)
-
     try {
-      const result = await deleteUser(userId)
-      
+      const updated: UserType = {
+        ...editingUser,
+        name: editNombre.trim(),
+        displayName: editNombre.trim(),
+        matricula: editMatricula.trim(),
+        profileId: editProfileId || editingUser.profileId,
+        username: editUsername.trim(),
+        role: editProfileId === 'profile-superuser' ? 'superuser' : 'operator',
+        updatedAt: new Date().toISOString()
+      }
+      if (editPassword.length >= 6) {
+        updated.passwordHash = await hashPassword(editPassword)
+      }
+      await updateUser(updated)
+      setStatus({ success: true, message: 'Usuario actualizado correctamente' })
+      setEditingUser(null)
+      await loadUsers()
+    } catch (error) {
+      console.error('Error updating user:', error)
+      setStatus({ success: false, message: 'Error al actualizar usuario' })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    setIsProcessing(true)
+    setStatus(null)
+    try {
+      const result = await deleteUser(deleteTarget.id)
       if (result.success) {
-        setStatus({
-          success: true,
-          message: 'Usuario eliminado exitosamente'
-        })
+        setStatus({ success: true, message: 'Usuario eliminado exitosamente' })
+        setDeleteTarget(null)
         await loadUsers()
       } else {
-        setStatus({
-          success: false,
-          message: result.error || 'Error al eliminar usuario'
-        })
+        setStatus({ success: false, message: result.error || 'Error al eliminar usuario' })
       }
     } catch (error) {
       console.error('Error deleting user:', error)
-      setStatus({
-        success: false,
-        message: 'Error al eliminar usuario'
-      })
+      setStatus({ success: false, message: 'Error al eliminar usuario' })
     } finally {
       setIsProcessing(false)
     }
   }
 
-  // Check if user has permission
   if (!currentUser || !hasPermission('canManageUsers')) {
     return (
       <div className="min-h-screen bg-background p-4 flex items-center justify-center">
@@ -174,10 +225,10 @@ export default function GestionUsuariosPage() {
             <h3 className="text-xl font-semibold mb-2">Acceso Denegado</h3>
             <p className="text-muted-foreground mb-6">No tienes permisos para acceder a esta sección.</p>
             <Button
-              onClick={() => router.push("/menu")}
+              onClick={() => router.push("/gestion-usuarios-perfiles")}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
-              Volver al Menú
+              Volver
             </Button>
           </CardContent>
         </Card>
@@ -191,20 +242,20 @@ export default function GestionUsuariosPage() {
         <div className="flex items-center gap-4 mb-8">
           <Button
             variant="outline"
-            onClick={() => router.push("/menu")}
+            onClick={() => router.push("/gestion-usuarios-perfiles")}
             className="border-border hover:bg-secondary bg-transparent"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver al Menú
+            Volver
           </Button>
           <h1 className="text-3xl font-bold text-foreground">Gestión de Usuarios</h1>
         </div>
 
         {status && (
           <div className={`mb-6 p-4 rounded-lg border ${
-            status.success 
-              ? 'bg-green-50 border-green-200 text-green-800' 
-              : 'bg-red-50 border-red-200 text-red-800'
+            status.success
+              ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-800 dark:text-green-200'
+              : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-200'
           }`}>
             <div className="flex items-center gap-2">
               <span className="font-medium">{status.message}</span>
@@ -281,13 +332,16 @@ export default function GestionUsuariosPage() {
                 </div>
                 <div>
                   <Label htmlFor="role">Rol</Label>
-                  <Select value={role} onValueChange={(value: "superuser" | "operator") => setRole(value)}>
+                  <Select value={profileId} onValueChange={setProfileId}>
                     <SelectTrigger className="mt-1">
-                      <SelectValue />
+                      <SelectValue placeholder="Seleccione un perfil" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="operator">Operador</SelectItem>
-                      <SelectItem value="superuser">Super Usuario</SelectItem>
+                      {profiles.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -323,25 +377,35 @@ export default function GestionUsuariosPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {user.role === 'superuser' ? (
+                      {user.profileId === 'profile-superuser' || user.role === 'superuser' ? (
                         <Shield className="w-5 h-5 text-amber-500" />
                       ) : (
                         <User className="w-5 h-5 text-blue-500" />
                       )}
                       <CardTitle className="text-lg">{user.displayName}</CardTitle>
                     </div>
-                    {user.id !== currentUser?.id && 
-                     user.id !== 'superuser-001' && 
+                    {user.id !== currentUser?.id &&
+                     user.id !== 'superuser-001' &&
                      user.id !== 'operator-001' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteUser(user.id, user.username)}
-                        disabled={isProcessing}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditClick(user)}
+                          disabled={isProcessing}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteTarget(user)}
+                          disabled={isProcessing}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </CardHeader>
@@ -353,9 +417,7 @@ export default function GestionUsuariosPage() {
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground">Rol:</span>
-                      <p className="text-foreground">
-                        {user.role === 'superuser' ? 'Super Usuario' : 'Operador'}
-                      </p>
+                      <p className="text-foreground">{profileName(user.profileId ?? '') || (user.role === 'superuser' ? 'Super Usuario' : 'Operador')}</p>
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground">Matrícula:</span>
@@ -363,9 +425,11 @@ export default function GestionUsuariosPage() {
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground">Creado:</span>
-                      <p className="text-foreground">
-                        {new Date(user.createdAt).toLocaleDateString()}
-                      </p>
+                      <p className="text-foreground">{new Date(user.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-muted-foreground">Modificado:</span>
+                      <p className="text-foreground">{user.updatedAt ? new Date(user.updatedAt).toLocaleDateString() : '-'}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -381,6 +445,106 @@ export default function GestionUsuariosPage() {
             </CardContent>
           </Card>
         )}
+
+        <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Editar usuario</DialogTitle>
+              <DialogDescription>
+                Modifique los datos del usuario. Deje la contraseña en blanco para no cambiarla.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              <div>
+                <Label htmlFor="editNombre">Nombre completo</Label>
+                <Input id="editNombre" value={editNombre} onChange={(e) => setEditNombre(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="editMatricula">Matrícula</Label>
+                <Input id="editMatricula" value={editMatricula} onChange={(e) => setEditMatricula(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="editProfileId">Rol</Label>
+                <Select value={editProfileId} onValueChange={setEditProfileId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="editUsername">Nombre de usuario</Label>
+                <Input id="editUsername" value={editUsername} onChange={(e) => setEditUsername(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="editPassword">Nueva contraseña (opcional)</Label>
+                <div className="relative mt-1">
+                  <Input
+                    id="editPassword"
+                    type={editShowPassword ? "text" : "password"}
+                    placeholder="Mínimo 6 caracteres"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditShowPassword((v) => !v)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground"
+                  >
+                    {editShowPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button onClick={handleEditSave} disabled={isProcessing} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
+                  {isProcessing ? 'Guardando...' : 'Guardar'}
+                </Button>
+                <Button variant="outline" onClick={() => setEditingUser(null)} disabled={isProcessing}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={!!editConfirmTarget} onOpenChange={(open) => !open && setEditConfirmTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Editar usuario</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Desea proseguir con la edición de este usuario?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleEditConfirmProceed}>Proceder</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eliminar usuario</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteTarget && (
+                  <>¿Está seguro de que desea eliminar al usuario &quot;{deleteTarget.displayName}&quot;? Esta acción no se puede deshacer.</>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { toast } from "sonner"
 
 interface InspeccionData {
   nombreInspeccion: string
@@ -616,7 +617,7 @@ export default function VideoEnCursoPage() {
     
     if (!isInitialized) {
       console.error('Database not initialized')
-      alert('La base de datos no está lista. Por favor, espere un momento e intente nuevamente.')
+      toast.error('La base de datos no está lista. Por favor, espere un momento e intente nuevamente.')
       return
     }
     
@@ -685,13 +686,13 @@ export default function VideoEnCursoPage() {
         router.push("/listado-inspecciones")
       } catch (error) {
         console.error('Error saving inspeccion:', error)
-        alert('Error al guardar la inspección. Por favor, intente nuevamente.')
+        toast.error('Error al guardar la inspección. Por favor, intente nuevamente.')
       } finally {
         setIsSaving(false)
       }
     } else {
       console.error('No inspeccionData available to save')
-      alert('No hay datos de inspección para guardar. Por favor, complete el formulario primero.')
+      toast.error('No hay datos de inspección para guardar. Por favor, complete el formulario primero.')
       setIsSaving(false)
     }
   }

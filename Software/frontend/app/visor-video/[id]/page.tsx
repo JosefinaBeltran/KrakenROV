@@ -16,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { toast } from "sonner"
 import {
   ArrowLeft,
   Play,
@@ -472,14 +473,14 @@ export default function VisorVideoPage() {
 
   const handleOpenFileExplorer = async () => {
     if (!inspeccion || !inspeccion.recordings || inspeccion.recordings.length === 0) {
-      alert("No hay grabaciones disponibles para descargar")
+      toast.error("No hay grabaciones disponibles para descargar")
       return
     }
 
     // Get the selected recording
     const selectedVideoData = inspeccion.recordings[selectedRecording]
     if (!selectedVideoData) {
-      alert("No hay video seleccionado")
+      toast.error("No hay video seleccionado")
       return
     }
 
@@ -502,10 +503,10 @@ export default function VisorVideoPage() {
       // Clean up
       window.URL.revokeObjectURL(url)
       
-      alert("Video descargado exitosamente. Puedes encontrarlo en tu carpeta de Descargas.")
+      toast.success("Video descargado exitosamente. Puedes encontrarlo en tu carpeta de Descargas.")
     } catch (error) {
       console.error('Error downloading video:', error)
-      alert("Error al descargar el video. Por favor, inténtalo nuevamente.")
+      toast.error("Error al descargar el video. Por favor, inténtalo nuevamente.")
     }
   }
 
@@ -653,7 +654,7 @@ export default function VisorVideoPage() {
       console.log('Frame capturado exitosamente. Total de capturas:', updatedFrames.length)
     } catch (error) {
       console.error('Error al capturar frame:', error)
-      alert('Error al capturar el frame. Por favor, inténtalo nuevamente.')
+      toast.error('Error al capturar el frame. Por favor, inténtalo nuevamente.')
     } finally {
       setIsCapturing(false)
     }
@@ -688,7 +689,7 @@ export default function VisorVideoPage() {
       setShowDeleteFrameDialog(false)
     } catch (error) {
       console.error('Error al eliminar frame:', error)
-      alert('Error al eliminar el frame. Por favor, inténtalo nuevamente.')
+      toast.error('Error al eliminar el frame. Por favor, inténtalo nuevamente.')
     }
   }
 

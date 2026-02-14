@@ -8,6 +8,7 @@ export async function getPredefinedUsers(): Promise<User[]> {
   const adminPasswordHash = await hashPassword('admin123')
   const operatorPasswordHash = await hashPassword('operador123')
 
+  const now = new Date().toISOString()
   return [
     {
       id: 'superuser-001',
@@ -17,7 +18,9 @@ export async function getPredefinedUsers(): Promise<User[]> {
       displayName: 'Super Usuario',
       passwordHash: adminPasswordHash,
       matricula: 'ADMIN001',
-      createdAt: new Date().toISOString()
+      profileId: 'profile-superuser',
+      createdAt: now,
+      updatedAt: now
     },
     {
       id: 'operator-001',
@@ -27,7 +30,9 @@ export async function getPredefinedUsers(): Promise<User[]> {
       displayName: 'Operador Invitado',
       passwordHash: operatorPasswordHash,
       matricula: 'OPER001',
-      createdAt: new Date().toISOString()
+      profileId: 'profile-operator',
+      createdAt: now,
+      updatedAt: now
     }
   ]
 }

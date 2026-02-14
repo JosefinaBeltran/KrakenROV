@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, RotateCcw, ArrowRight } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
+import { toast } from "sonner"
 
 export default function FormularioInspeccionPage() {
   const router = useRouter()
@@ -89,7 +90,7 @@ export default function FormularioInspeccionPage() {
         router.push("/video-en-curso")
       } catch (error) {
         console.error('Error saving form data:', error)
-        alert('Error al guardar los datos del formulario. Por favor, intente nuevamente.')
+        toast.error('Error al guardar los datos del formulario. Por favor, intente nuevamente.')
       }
     }
   }
