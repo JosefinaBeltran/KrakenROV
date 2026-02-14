@@ -73,7 +73,7 @@ function formFromPermissions(permissions: ProfilePermissions): Record<keyof Prof
 
 export default function GestionPerfilesPage() {
   const router = useRouter()
-  const { getAllProfiles, saveProfile, deleteProfile, getUsersByProfileId, currentUser, hasPermission } = useDatabase()
+  const { getAllProfiles, saveProfile, deleteProfile, getUsersByProfileId, currentUser, hasPermission, isInitialized } = useDatabase()
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
@@ -83,17 +83,29 @@ export default function GestionPerfilesPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null)
   const [editConfirmTarget, setEditConfirmTarget] = useState<Profile | null>(null)
+  const [showEditPermissionsDialog, setShowEditPermissionsDialog] = useState(false)
+  const [isEditingFromDialog, setIsEditingFromDialog] = useState(false)
   const [statusMessage, setStatusMessage] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
-    loadProfiles()
-  }, [])
+    if (isInitialized) {
+      loadProfiles()
+    }
+  }, [isInitialized])
 
   const loadProfiles = async () => {
     setIsLoading(true)
     try {
       const list = await getAllProfiles()
-      setProfiles(list)
+      // Eliminar duplicados por ID (mantener el primero)
+      const uniqueProfiles = Array.from(
+        new Map(list.map(p => [p.id, p])).values()
+      )
+      // Eliminar duplicados por nombre (mantener el primero)
+      const finalProfiles = Array.from(
+        new Map(uniqueProfiles.map(p => [p.name.toLowerCase(), p])).values()
+      )
+      setProfiles(finalProfiles)
     } catch (e) {
       console.error(e)
       setStatusMessage({ success: false, message: 'Error al cargar perfiles' })
@@ -110,15 +122,9 @@ export default function GestionPerfilesPage() {
   }
 
   const handleEditClick = (profile: Profile) => {
-    setEditConfirmTarget(profile)
-  }
-
-  const handleEditConfirmProceed = () => {
-    if (!editConfirmTarget) return
-    setFormName(editConfirmTarget.name)
-    setFormPermissions(formFromPermissions(editConfirmTarget.permissions))
-    setEditProfile(editConfirmTarget)
-    setEditConfirmTarget(null)
+    setFormName(profile.name)
+    setFormPermissions(formFromPermissions(profile.permissions))
+    setEditProfile(profile)
     setCreateOpen(true)
   }
 
@@ -127,32 +133,52 @@ export default function GestionPerfilesPage() {
       setStatusMessage({ success: false, message: 'El nombre del perfil es requerido' })
       return
     }
+    
+    // Validar que no haya perfiles duplicados
+    const trimmedName = formName.trim()
+    const existingProfile = profiles.find(p => p.name.toLowerCase() === trimmedName.toLowerCase() && p.id !== editProfile?.id)
+    if (existingProfile) {
+      setStatusMessage({ success: false, message: 'Ya existe un perfil con ese nombre' })
+      return
+    }
+    
     setIsProcessing(true)
     setStatusMessage(null)
     try {
       const now = new Date().toISOString()
       const permissions = permissionsFromForm(formPermissions)
+      const wasEditing = !!editProfile
+      let savedProfile: Profile
       if (editProfile) {
-        await saveProfile({
+        savedProfile = {
           ...editProfile,
-          name: formName.trim(),
+          name: trimmedName,
           permissions,
           updatedAt: now
-        })
+        }
+        await saveProfile(savedProfile)
         setStatusMessage({ success: true, message: 'Perfil actualizado correctamente' })
       } else {
-        await saveProfile({
+        savedProfile = {
           id: `profile-${Date.now()}`,
-          name: formName.trim(),
+          name: trimmedName,
           permissions,
           createdAt: now,
           updatedAt: now
-        })
+        }
+        await saveProfile(savedProfile)
         setStatusMessage({ success: true, message: 'Perfil creado correctamente' })
       }
       setCreateOpen(false)
       setEditProfile(null)
       await loadProfiles()
+      // Mostrar popup para editar permisos después de guardar (solo si se editó un perfil y no viene del popup)
+      if (wasEditing && !isEditingFromDialog) {
+        setEditConfirmTarget(savedProfile)
+        setShowEditPermissionsDialog(true)
+      } else {
+        setIsEditingFromDialog(false)
+      }
     } catch (e) {
       console.error(e)
       setStatusMessage({ success: false, message: 'Error al guardar el perfil' })
@@ -168,25 +194,18 @@ export default function GestionPerfilesPage() {
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return
     const id = deleteTarget.id
-    if (id === PROFILE_SUPERUSER_ID || id === PROFILE_OPERATOR_ID) {
-      setStatusMessage({ success: false, message: 'No se pueden eliminar los perfiles predeterminados' })
-      setDeleteTarget(null)
-      return
-    }
-    const usersWithProfile = await getUsersByProfileId(id)
-    if (usersWithProfile.length > 0) {
-      setStatusMessage({
-        success: false,
-        message: `No se puede eliminar: ${usersWithProfile.length} usuario(s) tienen este perfil. Reasigne otro perfil a esos usuarios primero.`
-      })
+    // No se pueden eliminar los perfiles predeterminados
+    if (id === PROFILE_OPERATOR_ID || id === PROFILE_SUPERUSER_ID) {
+      setStatusMessage({ success: false, message: 'No se pueden eliminar los perfiles predeterminados (Super Usuario y Operador)' })
       setDeleteTarget(null)
       return
     }
     setIsProcessing(true)
     setStatusMessage(null)
     try {
+      // deleteProfile ahora asigna automáticamente el perfil Operador a los usuarios
       await deleteProfile(id)
-      setStatusMessage({ success: true, message: 'Perfil eliminado correctamente' })
+      setStatusMessage({ success: true, message: 'Perfil eliminado correctamente. Los usuarios con este perfil fueron asignados al perfil Operador.' })
       setDeleteTarget(null)
       await loadProfiles()
     } catch (e) {
@@ -291,7 +310,7 @@ export default function GestionPerfilesPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => handleDeleteClick(profile)}
-                      disabled={isProcessing || profile.id === PROFILE_SUPERUSER_ID || profile.id === PROFILE_OPERATOR_ID}
+                      disabled={isProcessing || profile.id === PROFILE_OPERATOR_ID || profile.id === PROFILE_SUPERUSER_ID}
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 className="w-4 h-4 mr-1" />
@@ -350,17 +369,35 @@ export default function GestionPerfilesPage() {
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={!!editConfirmTarget} onOpenChange={(open) => !open && setEditConfirmTarget(null)}>
+        <AlertDialog open={showEditPermissionsDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowEditPermissionsDialog(false)
+            setEditConfirmTarget(null)
+          }
+        }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Editar permisos</AlertDialogTitle>
               <AlertDialogDescription>
-                ¿Desea proseguir con la edición de los permisos de este perfil?
+                ¿Desea continuar editando los permisos de este perfil?
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleEditConfirmProceed}>Proceder</AlertDialogAction>
+              <AlertDialogCancel onClick={() => {
+                setShowEditPermissionsDialog(false)
+                setEditConfirmTarget(null)
+              }}>No</AlertDialogCancel>
+              <AlertDialogAction onClick={() => {
+                setShowEditPermissionsDialog(false)
+                if (editConfirmTarget) {
+                  setIsEditingFromDialog(true)
+                  setFormName(editConfirmTarget.name)
+                  setFormPermissions(formFromPermissions(editConfirmTarget.permissions))
+                  setEditProfile(editConfirmTarget)
+                  setCreateOpen(true)
+                }
+                setEditConfirmTarget(null)
+              }}>Sí, editar permisos</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -370,14 +407,14 @@ export default function GestionPerfilesPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Eliminar perfil</AlertDialogTitle>
               <AlertDialogDescription>
-                {deleteTarget && (deleteTarget.id === PROFILE_SUPERUSER_ID || deleteTarget.id === PROFILE_OPERATOR_ID)
+                {deleteTarget && (deleteTarget.id === PROFILE_OPERATOR_ID || deleteTarget.id === PROFILE_SUPERUSER_ID)
                   ? 'No se pueden eliminar los perfiles predeterminados (Super Usuario y Operador).'
-                  : '¿Está seguro de que desea eliminar este perfil? Esta acción no se puede deshacer. Si hay usuarios con este perfil, deberá reasignarles otro perfil antes.'}
+                  : '¿Está seguro de que desea eliminar este perfil? Esta acción no se puede deshacer. Los usuarios con este perfil serán asignados automáticamente al perfil Operador.'}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              {deleteTarget && deleteTarget.id !== PROFILE_SUPERUSER_ID && deleteTarget.id !== PROFILE_OPERATOR_ID && (
+              {deleteTarget && deleteTarget.id !== PROFILE_OPERATOR_ID && deleteTarget.id !== PROFILE_SUPERUSER_ID && (
                 <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                   Eliminar
                 </AlertDialogAction>

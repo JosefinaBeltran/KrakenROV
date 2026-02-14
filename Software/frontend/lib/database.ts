@@ -30,6 +30,7 @@ export interface User {
   passwordHash: string
   matricula: string
   profileId?: string
+  active?: boolean // true by default, false when deactivated
   createdAt: string
   updatedAt?: string
 }
@@ -90,8 +91,8 @@ const DEFAULT_SUPERUSER_PERMISSIONS: ProfilePermissions = {
   canClearAllData: true
 }
 const DEFAULT_OPERATOR_PERMISSIONS: ProfilePermissions = {
-  canViewAllInspecciones: false,
-  canCreateInspecciones: true,
+  canViewAllInspecciones: true, // Permite consultar inspecciones
+  canCreateInspecciones: true, // Permite iniciar inspección
   canEditAllInspecciones: false,
   canDeleteInspecciones: false,
   canExportData: false,
@@ -106,7 +107,7 @@ const PROFILE_OPERATOR_ID = 'profile-operator'
 class LocalDatabase {
   private db: IDBDatabase | null = null
   private dbName = 'KrakenROV_DB'
-  private version = 3
+  private version = 4
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -180,6 +181,24 @@ class LocalDatabase {
                 updatedAt: u.updatedAt ?? u.createdAt ?? now
               }
               userStore.put(migrated)
+            })
+          }
+        }
+
+        // Migrate existing users: add active field (version 3 -> 4)
+        if (oldVersion === 3 && db.objectStoreNames.contains('users') && transaction) {
+          const userStore = transaction.objectStore('users')
+          const req = userStore.getAll()
+          req.onsuccess = () => {
+            const users: User[] = req.result || []
+            users.forEach((u) => {
+              if (u.active === undefined) {
+                const migrated: User = {
+                  ...u,
+                  active: true
+                }
+                userStore.put(migrated)
+              }
             })
           }
         }

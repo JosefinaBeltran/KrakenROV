@@ -3,12 +3,13 @@
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, UserPlus, Trash2, Pencil, Shield, User } from "lucide-react"
+import { ArrowLeft, UserPlus, Trash2, Pencil, Shield, User, Filter } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import { useState, useEffect } from "react"
 import { User as UserType } from "@/lib/database"
 import { Profile } from "@/lib/database"
-import { hashPassword } from "@/lib/password"
+import { hashPassword, validatePasswordStrength } from "@/lib/password"
+import { KRAKENROV_USER_ID } from "@/lib/users"
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,7 @@ import {
 
 export default function GestionUsuariosPage() {
   const router = useRouter()
-  const { getAllUsers, getAllProfiles, deleteUser, register, updateUser, isInitialized, currentUser, hasPermission } = useDatabase()
+  const { getAllUsers, getAllProfiles, deleteUser, register, updateUser, isInitialized, currentUser, hasPermission, getUserByMatricula } = useDatabase()
   const [users, setUsers] = useState<UserType[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -44,6 +45,7 @@ export default function GestionUsuariosPage() {
   const [deleteTarget, setDeleteTarget] = useState<UserType | null>(null)
   const [editConfirmTarget, setEditConfirmTarget] = useState<UserType | null>(null)
   const [editingUser, setEditingUser] = useState<UserType | null>(null)
+  const [showEditPermissionsDialog, setShowEditPermissionsDialog] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
   // Create form state
@@ -61,11 +63,32 @@ export default function GestionUsuariosPage() {
   const [editPassword, setEditPassword] = useState("")
   const [editShowPassword, setEditShowPassword] = useState(false)
 
+  // Dialog error state
+  const [dialogError, setDialogError] = useState<string | null>(null)
+
+  // Filter state
+  const [filterName, setFilterName] = useState("")
+  const [filterProfileId, setFilterProfileId] = useState<string>("all")
+
   useEffect(() => {
     if (!isInitialized) return
     loadUsers()
-    getAllProfiles().then(setProfiles)
+    loadProfiles()
   }, [isInitialized])
+
+  const loadProfiles = async () => {
+    try {
+      const profilesList = await getAllProfiles()
+      // Eliminar duplicados por ID y filtrar solo perfiles válidos
+      const uniqueProfiles = Array.from(
+        new Map(profilesList.map(p => [p.id, p])).values()
+      ).filter(p => p && p.id && p.name && typeof p.id === 'string' && typeof p.name === 'string')
+      setProfiles(uniqueProfiles)
+    } catch (error) {
+      console.error('Error loading profiles:', error)
+      setProfiles([])
+    }
+  }
 
   useEffect(() => {
     if (profiles.length > 0 && !profileId) {
@@ -93,30 +116,56 @@ export default function GestionUsuariosPage() {
 
   const profileName = (id: string) => profiles.find((p) => p.id === id)?.name ?? id
 
+  // Filtrar usuarios
+  const filteredUsers = users.filter(user => {
+    const matchesName = !filterName || user.name.toLowerCase().includes(filterName.toLowerCase()) || user.username.toLowerCase().includes(filterName.toLowerCase())
+    const matchesProfile = filterProfileId === "all" || user.profileId === filterProfileId
+    return matchesName && matchesProfile
+  })
+
+  const handleToggleActive = async (user: UserType) => {
+    if (user.id === KRAKENROV_USER_ID) {
+      setStatus({ success: false, message: 'No se puede desactivar el usuario predefinido del sistema' })
+      return
+    }
+    setIsProcessing(true)
+    setStatus(null)
+    try {
+      const updated: UserType = {
+        ...user,
+        active: !user.active,
+        updatedAt: new Date().toISOString()
+      }
+      await updateUser(updated)
+      setStatus({ success: true, message: `Usuario ${updated.active ? 'activado' : 'desactivado'} correctamente` })
+      await loadUsers()
+    } catch (error) {
+      console.error('Error toggling user active:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Error al cambiar estado del usuario'
+      setStatus({ success: false, message: errorMessage })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const handleCreateUser = async () => {
+    setDialogError(null)
     setStatus(null)
     
     if (!username || !password || !nombreCompleto || !matricula) {
-      setStatus({
-        success: false,
-        message: 'Todos los campos son requeridos'
-      })
+      setDialogError('Todos los campos son requeridos')
       return
     }
 
     if (username.length < 3) {
-      setStatus({
-        success: false,
-        message: 'El nombre de usuario debe tener al menos 3 caracteres'
-      })
+      setDialogError('El nombre de usuario debe tener al menos 3 caracteres')
       return
     }
 
-    if (password.length < 6) {
-      setStatus({
-        success: false,
-        message: 'La contraseña debe tener al menos 6 caracteres'
-      })
+    // Validar contraseña: 8 caracteres, mayúscula y número
+    const passwordValidation = validatePasswordStrength(password)
+    if (!passwordValidation.valid) {
+      setDialogError(passwordValidation.error || 'La contraseña no cumple con los requisitos')
       return
     }
 
@@ -130,32 +179,27 @@ export default function GestionUsuariosPage() {
         setNombreCompleto("")
         setMatricula("")
         setProfileId(profiles[0]?.id ?? '')
+        setDialogError(null)
         setIsDialogOpen(false)
         await loadUsers()
       } else {
-        setStatus({ success: false, message: result.error || 'Error al crear usuario' })
+        setDialogError(result.error || 'Error al crear usuario')
       }
     } catch (error) {
       console.error('Error creating user:', error)
-      setStatus({ success: false, message: 'Error al crear usuario' })
+      setDialogError('Error al crear usuario')
     } finally {
       setIsProcessing(false)
     }
   }
 
   const handleEditClick = (user: UserType) => {
-    setEditConfirmTarget(user)
-  }
-
-  const handleEditConfirmProceed = () => {
-    if (!editConfirmTarget) return
-    setEditingUser(editConfirmTarget)
-    setEditNombre(editConfirmTarget.name)
-    setEditMatricula(editConfirmTarget.matricula)
-    setEditProfileId(editConfirmTarget.profileId ?? 'profile-operator')
-    setEditUsername(editConfirmTarget.username)
+    setEditingUser(user)
+    setEditNombre(user.name)
+    setEditMatricula(user.matricula)
+    setEditProfileId(user.profileId ?? 'profile-operator')
+    setEditUsername(user.username)
     setEditPassword("")
-    setEditConfirmTarget(null)
   }
 
   const handleEditSave = async () => {
@@ -168,29 +212,53 @@ export default function GestionUsuariosPage() {
       setStatus({ success: false, message: 'El nombre de usuario debe tener al menos 3 caracteres' })
       return
     }
+    // Validar duplicados: nombre y matrícula
+    const trimmedNombre = editNombre.trim()
+    const trimmedMatricula = editMatricula.trim()
+    const allUsers = await getAllUsers()
+    const duplicateName = allUsers.find(u => u.id !== editingUser.id && u.name.toLowerCase() === trimmedNombre.toLowerCase())
+    if (duplicateName) {
+      setStatus({ success: false, message: 'Ya existe un usuario con ese nombre completo' })
+      return
+    }
+    const duplicateMatricula = await getUserByMatricula(trimmedMatricula)
+    if (duplicateMatricula && duplicateMatricula.id !== editingUser.id) {
+      setStatus({ success: false, message: 'Ya existe un usuario con esa matrícula' })
+      return
+    }
+
     setIsProcessing(true)
     setStatus(null)
     try {
       const updated: UserType = {
         ...editingUser,
-        name: editNombre.trim(),
-        displayName: editNombre.trim(),
-        matricula: editMatricula.trim(),
+        name: trimmedNombre,
+        displayName: trimmedNombre,
+        matricula: trimmedMatricula,
         profileId: editProfileId || editingUser.profileId,
         username: editUsername.trim(),
         role: editProfileId === 'profile-superuser' ? 'superuser' : 'operator',
         updatedAt: new Date().toISOString()
       }
-      if (editPassword.length >= 6) {
+      if (editPassword.length > 0) {
+        const passwordValidation = validatePasswordStrength(editPassword)
+        if (!passwordValidation.valid) {
+          setStatus({ success: false, message: passwordValidation.error || 'La contraseña no cumple con los requisitos' })
+          return
+        }
         updated.passwordHash = await hashPassword(editPassword)
       }
       await updateUser(updated)
       setStatus({ success: true, message: 'Usuario actualizado correctamente' })
       setEditingUser(null)
       await loadUsers()
+      // Mostrar popup para editar permisos después de guardar
+      setEditConfirmTarget(updated)
+      setShowEditPermissionsDialog(true)
     } catch (error) {
       console.error('Error updating user:', error)
-      setStatus({ success: false, message: 'Error al actualizar usuario' })
+      const errorMessage = error instanceof Error ? error.message : 'Error al actualizar usuario'
+      setStatus({ success: false, message: errorMessage })
     } finally {
       setIsProcessing(false)
     }
@@ -278,8 +346,12 @@ export default function GestionUsuariosPage() {
                   Complete el formulario para crear un nuevo usuario
                 </DialogDescription>
               </DialogHeader>
+              {dialogError && (
+                <div className="mt-4 p-3 rounded-lg border bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-200">
+                  <span className="text-sm font-medium">{dialogError}</span>
+                </div>
+              )}
               <div className="space-y-4 mt-4">
-                
                 <div>
                   <Label htmlFor="nombreCompleto">Nombre Completo</Label>
                   <Input
@@ -316,7 +388,7 @@ export default function GestionUsuariosPage() {
                     <Input
                       id="password"
                       type={showPassword ? "text" : "password"}
-                      placeholder="Ingrese contraseña (mínimo 6 caracteres)"
+                      placeholder="Mínimo 8 caracteres, 1 mayúscula y 1 número"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="pr-10"
@@ -331,13 +403,13 @@ export default function GestionUsuariosPage() {
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="role">Rol</Label>
+                  <Label htmlFor="profile">Perfil</Label>
                   <Select value={profileId} onValueChange={setProfileId}>
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Seleccione un perfil" />
                     </SelectTrigger>
                     <SelectContent>
-                      {profiles.map((p) => (
+                      {profiles.filter(p => p && p.id && p.name && typeof p.id === 'string' && typeof p.name === 'string').map((p) => (
                         <SelectItem key={p.id} value={p.id}>
                           {p.name}
                         </SelectItem>
@@ -355,7 +427,14 @@ export default function GestionUsuariosPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
+                    onClick={() => {
+                      setIsDialogOpen(false)
+                      setDialogError(null)
+                      setUsername("")
+                      setPassword("")
+                      setNombreCompleto("")
+                      setMatricula("")
+                    }}
                     disabled={isProcessing}
                   >
                     Cancelar
@@ -366,14 +445,53 @@ export default function GestionUsuariosPage() {
           </Dialog>
         </div>
 
+        {/* Filtros */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="w-5 h-5" />
+              Filtros de Búsqueda
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Nombre o Usuario</label>
+                <Input
+                  placeholder="Buscar por nombre o usuario..."
+                  value={filterName}
+                  onChange={(e) => setFilterName(e.target.value)}
+                  className="bg-secondary border-border"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Perfil</label>
+                <Select value={filterProfileId} onValueChange={setFilterProfileId}>
+                  <SelectTrigger className="bg-secondary border-border">
+                    <SelectValue placeholder="Todos los perfiles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los perfiles</SelectItem>
+                    {profiles.filter(p => p && p.id && p.name && typeof p.id === 'string' && typeof p.name === 'string').map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {isLoading ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground">Cargando usuarios...</p>
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {users.map((user) => (
-              <Card key={user.id} className="hover:bg-card/80 transition-colors">
+            {filteredUsers.map((user) => {
+              const isInactive = user.active === false
+              return (
+              <Card key={user.id} className={`hover:bg-card/80 transition-colors ${isInactive ? 'opacity-60 bg-muted/30' : ''}`}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -384,9 +502,7 @@ export default function GestionUsuariosPage() {
                       )}
                       <CardTitle className="text-lg">{user.displayName}</CardTitle>
                     </div>
-                    {user.id !== currentUser?.id &&
-                     user.id !== 'superuser-001' &&
-                     user.id !== 'operator-001' && (
+                    {user.id !== currentUser?.id && user.id !== KRAKENROV_USER_ID && (
                       <div className="flex gap-1">
                         <Button
                           variant="ghost"
@@ -395,6 +511,19 @@ export default function GestionUsuariosPage() {
                           disabled={isProcessing}
                         >
                           <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleActive(user)}
+                          disabled={isProcessing}
+                          title={user.active === false ? 'Activar usuario' : 'Desactivar usuario'}
+                        >
+                          {user.active === false ? (
+                            <User className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <User className="w-4 h-4 text-gray-400" />
+                          )}
                         </Button>
                         <Button
                           variant="ghost"
@@ -416,9 +545,14 @@ export default function GestionUsuariosPage() {
                       <p className="text-foreground">{user.username}</p>
                     </div>
                     <div>
-                      <span className="font-medium text-muted-foreground">Rol:</span>
+                      <span className="font-medium text-muted-foreground">Perfil:</span>
                       <p className="text-foreground">{profileName(user.profileId ?? '') || (user.role === 'superuser' ? 'Super Usuario' : 'Operador')}</p>
                     </div>
+                    {isInactive && (
+                      <div className="pt-2 border-t">
+                        <span className="text-xs font-medium text-muted-foreground">Estado: Desactivado</span>
+                      </div>
+                    )}
                     <div>
                       <span className="font-medium text-muted-foreground">Matrícula:</span>
                       <p className="text-foreground">{user.matricula}</p>
@@ -434,7 +568,8 @@ export default function GestionUsuariosPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            )
+            })}
           </div>
         )}
 
@@ -464,13 +599,13 @@ export default function GestionUsuariosPage() {
                 <Input id="editMatricula" value={editMatricula} onChange={(e) => setEditMatricula(e.target.value)} className="mt-1" />
               </div>
               <div>
-                <Label htmlFor="editProfileId">Rol</Label>
+                <Label htmlFor="editProfileId">Perfil</Label>
                 <Select value={editProfileId} onValueChange={setEditProfileId}>
                   <SelectTrigger className="mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {profiles.map((p) => (
+                    {profiles.filter(p => p && p.id && p.name && typeof p.id === 'string' && typeof p.name === 'string').map((p) => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -486,7 +621,7 @@ export default function GestionUsuariosPage() {
                   <Input
                     id="editPassword"
                     type={editShowPassword ? "text" : "password"}
-                    placeholder="Mínimo 6 caracteres"
+                      placeholder="Mínimo 8 caracteres, 1 mayúscula y 1 número"
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
                     className="pr-10"
@@ -512,17 +647,31 @@ export default function GestionUsuariosPage() {
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={!!editConfirmTarget} onOpenChange={(open) => !open && setEditConfirmTarget(null)}>
+        <AlertDialog open={showEditPermissionsDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowEditPermissionsDialog(false)
+            setEditConfirmTarget(null)
+          }
+        }}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Editar usuario</AlertDialogTitle>
+              <AlertDialogTitle>Editar permisos</AlertDialogTitle>
               <AlertDialogDescription>
-                ¿Desea proseguir con la edición de este usuario?
+                ¿Desea editar los permisos de este usuario?
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleEditConfirmProceed}>Proceder</AlertDialogAction>
+              <AlertDialogCancel onClick={() => {
+                setShowEditPermissionsDialog(false)
+                setEditConfirmTarget(null)
+              }}>No</AlertDialogCancel>
+              <AlertDialogAction onClick={() => {
+                setShowEditPermissionsDialog(false)
+                if (editConfirmTarget) {
+                  router.push('/gestion-perfiles')
+                }
+                setEditConfirmTarget(null)
+              }}>Sí, editar permisos</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
