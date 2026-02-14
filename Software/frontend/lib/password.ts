@@ -22,3 +22,23 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return passwordHash === hash
 }
 
+/**
+ * Validate password strength
+ * Requirements: 8 characters minimum, at least one uppercase letter, at least one number
+ */
+export function validatePasswordStrength(password: string): { valid: boolean; error?: string } {
+  if (password.length < 8) {
+    return { valid: false, error: 'La contraseña debe tener al menos 8 caracteres' }
+  }
+  
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, error: 'La contraseña debe contener al menos una letra mayúscula' }
+  }
+  
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, error: 'La contraseña debe contener al menos un número' }
+  }
+  
+  return { valid: true }
+}
+

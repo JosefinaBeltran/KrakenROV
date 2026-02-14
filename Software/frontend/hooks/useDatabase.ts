@@ -1,18 +1,22 @@
 import { useState, useEffect, useCallback } from 'react'
-import { localDB, User, Session, InspeccionData, TempInspeccionData } from '@/lib/database'
+import { localDB, User, Session, InspeccionData, TempInspeccionData, Profile, ProfilePermissions } from '@/lib/database'
 import { backupService } from '@/lib/backupService'
-import { getPredefinedUsers, DEFAULT_PASSWORDS, USER_PERMISSIONS, UserRole } from '@/lib/users'
-import { hashPassword, verifyPassword } from '@/lib/password'
+import { getPredefinedUsers, DEFAULT_PASSWORDS, USER_PERMISSIONS, UserRole, KRAKENROV_USER_ID } from '@/lib/users'
+import { hashPassword, verifyPassword, validatePasswordStrength } from '@/lib/password'
 
 export function useDatabase() {
   const [isInitialized, setIsInitialized] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentUserPermissions, setCurrentUserPermissions] = useState<ProfilePermissions | null>(null)
 
   useEffect(() => {
     const initDB = async () => {
       try {
         await localDB.init()
+        
+        // Initialize predefined profiles if they don't exist
+        await initializePredefinedProfiles()
         
         // Initialize predefined users if they don't exist
         await initializePredefinedUsers()
@@ -31,6 +35,66 @@ export function useDatabase() {
     initDB()
   }, [])
 
+  // Initialize predefined profiles
+  const initializePredefinedProfiles = useCallback(async () => {
+    try {
+      const PROFILE_SUPERUSER_ID = 'profile-superuser'
+      const PROFILE_OPERATOR_ID = 'profile-operator'
+      
+      const DEFAULT_SUPERUSER_PERMISSIONS: ProfilePermissions = {
+        canViewAllInspecciones: true,
+        canCreateInspecciones: true,
+        canEditAllInspecciones: true,
+        canDeleteInspecciones: true,
+        canExportData: true,
+        canImportData: true,
+        canManageUsers: true,
+        canClearAllData: true
+      }
+      
+      const DEFAULT_OPERATOR_PERMISSIONS: ProfilePermissions = {
+        canViewAllInspecciones: true,
+        canCreateInspecciones: true,
+        canEditAllInspecciones: false,
+        canDeleteInspecciones: false,
+        canExportData: false,
+        canImportData: false,
+        canManageUsers: false,
+        canClearAllData: false
+      }
+      
+      const now = new Date().toISOString()
+      
+      // Check and create Super Usuario profile
+      const superuserProfile = await localDB.getProfileById(PROFILE_SUPERUSER_ID)
+      if (!superuserProfile) {
+        await localDB.saveProfile({
+          id: PROFILE_SUPERUSER_ID,
+          name: 'Super Usuario',
+          permissions: DEFAULT_SUPERUSER_PERMISSIONS,
+          createdAt: now,
+          updatedAt: now
+        } as Profile)
+        console.log('Initialized predefined profile: Super Usuario')
+      }
+      
+      // Check and create Operador profile
+      const operatorProfile = await localDB.getProfileById(PROFILE_OPERATOR_ID)
+      if (!operatorProfile) {
+        await localDB.saveProfile({
+          id: PROFILE_OPERATOR_ID,
+          name: 'Operador',
+          permissions: DEFAULT_OPERATOR_PERMISSIONS,
+          createdAt: now,
+          updatedAt: now
+        } as Profile)
+        console.log('Initialized predefined profile: Operador')
+      }
+    } catch (error) {
+      console.error('Error initializing predefined profiles:', error)
+    }
+  }, [])
+
   // Initialize predefined users
   const initializePredefinedUsers = useCallback(async () => {
     try {
@@ -41,12 +105,19 @@ export function useDatabase() {
           await localDB.saveUser(user)
           console.log('Initialized predefined user:', user.username)
         } else {
-          // Update existing user if passwordHash or matricula is missing
-          if (!existingUser.passwordHash || !existingUser.matricula) {
-            const updatedUser = {
+          // Update existing user if passwordHash, matricula, profileId or updatedAt is missing
+          const needsUpdate =
+            !existingUser.passwordHash ||
+            !existingUser.matricula ||
+            !existingUser.profileId ||
+            !existingUser.updatedAt
+          if (needsUpdate) {
+            const updatedUser: User = {
               ...existingUser,
               passwordHash: existingUser.passwordHash || user.passwordHash,
-              matricula: existingUser.matricula || user.matricula
+              matricula: existingUser.matricula || user.matricula,
+              profileId: existingUser.profileId ?? user.profileId,
+              updatedAt: existingUser.updatedAt ?? user.updatedAt ?? new Date().toISOString()
             }
             await localDB.saveUser(updatedUser)
             console.log('Updated predefined user:', user.username)
@@ -70,14 +141,22 @@ export function useDatabase() {
         console.log('Found user by ID:', user)
         if (user) {
           setCurrentUser(user)
+          if (user.profileId) {
+            const profile = await localDB.getProfileById(user.profileId)
+            setCurrentUserPermissions(profile?.permissions ?? null)
+          } else {
+            setCurrentUserPermissions(null)
+          }
           console.log('Successfully loaded current user:', user.username, 'with role:', user.role)
         } else {
           console.error('User not found for session userId:', session.userId)
           setCurrentUser(null)
+          setCurrentUserPermissions(null)
         }
       } else {
         console.log('No active session found')
         setCurrentUser(null)
+        setCurrentUserPermissions(null)
       }
     } catch (error) {
       console.error('Error loading current user:', error)
@@ -110,6 +189,11 @@ export function useDatabase() {
         return { success: false, error: 'Usuario no encontrado' }
       }
 
+      // Check if user is active
+      if (user.active === false) {
+        return { success: false, error: 'Este usuario está desactivado. Contacte al administrador.' }
+      }
+
       // Verify password
       if (!user.passwordHash) {
         // Legacy user without password hash, check against DEFAULT_PASSWORDS
@@ -140,7 +224,12 @@ export function useDatabase() {
 
       await localDB.saveSession(session)
       setCurrentUser(user)
-      
+      if (user.profileId) {
+        const profile = await localDB.getProfileById(user.profileId)
+        setCurrentUserPermissions(profile?.permissions ?? null)
+      } else {
+        setCurrentUserPermissions(null)
+      }
       console.log('User logged in:', user.username, 'with role:', user.role)
       return { success: true, user }
       
@@ -153,12 +242,13 @@ export function useDatabase() {
     }
   }, [isInitialized])
 
-  // Register new user
+  // Register new user (profileId optional; defaults to operator profile)
   const register = useCallback(async (
     username: string,
     password: string,
     nombreCompleto: string,
-    matricula: string
+    matricula: string,
+    profileId?: string
   ): Promise<{ success: boolean; user?: User; error?: string }> => {
     if (!isInitialized) {
       return { success: false, error: 'Database not initialized' }
@@ -174,8 +264,9 @@ export function useDatabase() {
         return { success: false, error: 'El nombre de usuario debe tener al menos 3 caracteres' }
       }
 
-      if (password.length < 6) {
-        return { success: false, error: 'La contraseña debe tener al menos 6 caracteres' }
+      const passwordValidation = validatePasswordStrength(password)
+      if (!passwordValidation.valid) {
+        return { success: false, error: passwordValidation.error || 'La contraseña no cumple con los requisitos' }
       }
 
       // Check if username already exists
@@ -193,16 +284,20 @@ export function useDatabase() {
       // Hash password
       const passwordHash = await hashPassword(password)
 
-      // Create new user
+      const now = new Date().toISOString()
+      // Create new user (role derived from profile for legacy; new users use profileId)
       const newUser: User = {
         id: `user-${Date.now()}`,
         username,
         name: nombreCompleto,
         displayName: nombreCompleto,
-        role: 'operator', // New users are operators by default
+        role: profileId ? (profileId === 'profile-superuser' ? 'superuser' : 'operator') : 'operator',
         passwordHash,
         matricula,
-        createdAt: new Date().toISOString()
+        profileId: profileId ?? 'profile-operator',
+        active: true,
+        createdAt: now,
+        updatedAt: now
       }
 
       // Save user to database
@@ -225,22 +320,78 @@ export function useDatabase() {
     return USER_PERMISSIONS[userRole] || USER_PERMISSIONS.operator
   }, [])
 
-  // Check if user has permission
+  // Check if user has permission (from profile if profileId, else from legacy role)
   const hasPermission = useCallback((permission: keyof typeof USER_PERMISSIONS.superuser) => {
     if (!currentUser) return false
-    const permissions = getUserPermissions(currentUser.role)
-    return permissions[permission]
-  }, [currentUser, getUserPermissions])
+    if (currentUserPermissions) return currentUserPermissions[permission]
+    return getUserPermissions(currentUser.role)[permission]
+  }, [currentUser, currentUserPermissions, getUserPermissions])
 
   const getUser = useCallback(async (username: string) => {
     if (!isInitialized) return null
     return await localDB.getUser(username)
   }, [isInitialized])
 
+  const getUserByMatricula = useCallback(async (matricula: string) => {
+    if (!isInitialized) return null
+    return await localDB.getUserByMatricula(matricula)
+  }, [isInitialized])
+
   const getAllUsers = useCallback(async () => {
     if (!isInitialized) return []
     return await localDB.getAllUsers()
   }, [isInitialized])
+
+  const updateUser = useCallback(async (user: User) => {
+    if (!isInitialized) return
+    // Prevent editing predefined user
+    if (user.id === KRAKENROV_USER_ID) {
+      throw new Error('No se puede editar el usuario predefinido del sistema')
+    }
+    const withUpdated = { ...user, updatedAt: new Date().toISOString() }
+    await localDB.saveUser(withUpdated)
+  }, [isInitialized])
+
+  // Profile operations
+  const getAllProfiles = useCallback(async () => {
+    if (!isInitialized) return []
+    return await localDB.getAllProfiles()
+  }, [isInitialized])
+
+  const getProfileById = useCallback(async (id: string) => {
+    if (!isInitialized) return null
+    return await localDB.getProfileById(id)
+  }, [isInitialized])
+
+  const saveProfile = useCallback(async (profile: Profile) => {
+    if (!isInitialized) return
+    await localDB.saveProfile(profile)
+  }, [isInitialized])
+
+  const getUsersByProfileId = useCallback(async (profileId: string) => {
+    if (!isInitialized) return []
+    return await localDB.getUsersByProfileId(profileId)
+  }, [isInitialized])
+
+  const deleteProfile = useCallback(async (id: string) => {
+    if (!isInitialized) return
+    // Get all users with this profile
+    const usersWithProfile = await getUsersByProfileId(id)
+    
+    // Assign default operator profile to all users with the deleted profile
+    const PROFILE_OPERATOR_ID = 'profile-operator'
+    for (const user of usersWithProfile) {
+      const updatedUser: User = {
+        ...user,
+        profileId: PROFILE_OPERATOR_ID,
+        role: 'operator',
+        updatedAt: new Date().toISOString()
+      }
+      await localDB.saveUser(updatedUser)
+    }
+    
+    await localDB.deleteProfile(id)
+  }, [isInitialized, getUsersByProfileId])
 
   const deleteUser = useCallback(async (userId: string) => {
     if (!isInitialized) return { success: false, error: 'Database not initialized' }
@@ -251,9 +402,9 @@ export function useDatabase() {
         return { success: false, error: 'No puedes eliminar tu propio usuario' }
       }
       
-      // Prevent deleting predefined users
-      if (userId === 'superuser-001' || userId === 'operator-001') {
-        return { success: false, error: 'No se pueden eliminar usuarios predefinidos' }
+      // Prevent deleting predefined user
+      if (userId === KRAKENROV_USER_ID) {
+        return { success: false, error: 'No se puede eliminar el usuario predefinido del sistema' }
       }
       
       await localDB.deleteUser(userId)
@@ -289,6 +440,7 @@ export function useDatabase() {
     if (!isInitialized) return
     await localDB.clearSession()
     setCurrentUser(null)
+    setCurrentUserPermissions(null)
     console.log('Session cleared and currentUser reset')
   }, [isInitialized])
 
@@ -325,12 +477,12 @@ export function useDatabase() {
       console.log('No current user, returning empty array for inspecciones')
       return []
     }
-    
-    console.log('Getting inspecciones for user:', currentUser.username, 'with role:', currentUser.role)
-    const data = await localDB.getInspeccionesByUser(currentUser.id, currentUser.role)
+    const effectiveRole = currentUserPermissions?.canViewAllInspecciones ? 'superuser' : currentUser.role
+    console.log('Getting inspecciones for user:', currentUser.username, 'with role:', effectiveRole)
+    const data = await localDB.getInspeccionesByUser(currentUser.id, effectiveRole)
     console.log('Retrieved inspecciones from database:', data.length)
     return data
-  }, [isInitialized, currentUser])
+  }, [isInitialized, currentUser, currentUserPermissions])
 
   const getInspeccionById = useCallback(async (id: string) => {
     if (!isInitialized) {
@@ -483,9 +635,16 @@ export function useDatabase() {
     getUserPermissions,
     hasPermission,
     saveUser,
+    updateUser,
     getUser,
+    getUserByMatricula,
     getAllUsers,
     deleteUser,
+    getAllProfiles,
+    getProfileById,
+    saveProfile,
+    deleteProfile,
+    getUsersByProfileId,
     saveSession,
     getActiveSession,
     clearSession,

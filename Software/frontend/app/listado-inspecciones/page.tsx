@@ -10,6 +10,17 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, FileText, Calendar, MapPin, Filter, Edit, Trash2, ArrowUpDown } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
+import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface Inspeccion {
   id: string
@@ -38,6 +49,7 @@ export default function ListadoInspeccionesPage() {
     inspector: "",
     nombre: "",
   })
+  const [deleteInspeccionId, setDeleteInspeccionId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadInspecciones = async () => {
@@ -145,17 +157,20 @@ export default function ListadoInspeccionesPage() {
     router.push(`/editar-inspeccion/${inspeccionId}`)
   }
 
-  const handleDeleteInspeccion = async (e: React.MouseEvent, inspeccionId: string) => {
+  const handleDeleteInspeccionClick = (e: React.MouseEvent, inspeccionId: string) => {
     e.stopPropagation()
-    if (confirm("¿Está seguro de que desea eliminar esta inspección? Esta acción no se puede deshacer.")) {
-      try {
-        await deleteInspeccion(inspeccionId)
-        const updatedInspecciones = inspecciones.filter((insp) => insp.id !== inspeccionId)
-        setInspecciones(updatedInspecciones)
-      } catch (error) {
-        console.error('Error deleting inspeccion:', error)
-        alert('Error al eliminar la inspección. Por favor, intente nuevamente.')
-      }
+    setDeleteInspeccionId(inspeccionId)
+  }
+
+  const handleDeleteInspeccionConfirm = async () => {
+    if (!deleteInspeccionId) return
+    try {
+      await deleteInspeccion(deleteInspeccionId)
+      setInspecciones((prev) => prev.filter((insp) => insp.id !== deleteInspeccionId))
+      setDeleteInspeccionId(null)
+    } catch (error) {
+      console.error('Error deleting inspeccion:', error)
+      toast.error('Error al eliminar la inspección. Por favor, intente nuevamente.')
     }
   }
 
@@ -310,7 +325,7 @@ export default function ListadoInspeccionesPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={(e) => handleDeleteInspeccion(e, inspeccion.id)}
+                          onClick={(e) => handleDeleteInspeccionClick(e, inspeccion.id)}
                           className="h-8 w-8 p-0 hover:bg-red-500/20 text-white hover:text-white"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -345,6 +360,23 @@ export default function ListadoInspeccionesPage() {
             })}
           </div>
         )}
+
+        <AlertDialog open={!!deleteInspeccionId} onOpenChange={(open) => !open && setDeleteInspeccionId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eliminar inspección</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Está seguro de que desea eliminar esta inspección? Esta acción no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteInspeccionConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

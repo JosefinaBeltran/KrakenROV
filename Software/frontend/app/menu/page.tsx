@@ -117,14 +117,14 @@ export default function MenuPage() {
                 <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
                   <Users className="w-8 h-8 text-primary-foreground" />
                 </div>
-                <CardTitle className="text-xl">Gestión de Usuarios</CardTitle>
+                <CardTitle className="text-xl">Gestión de Usuarios y Perfiles</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col flex-1">
                 <div className="mt-auto">
                   <Button 
                     className="w-full btn-primary"
-                    onClick={() => router.push("/gestion-usuarios")}>
-                    Gestionar Usuarios
+                    onClick={() => router.push("/gestion-usuarios-perfiles")}>
+                    Gestionar Usuarios y Perfiles
                   </Button>
                 </div>
               </CardContent>
