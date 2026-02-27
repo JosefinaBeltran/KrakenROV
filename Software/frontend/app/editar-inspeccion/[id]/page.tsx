@@ -9,26 +9,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, RotateCcw, ArrowRight, Save } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
-
-interface Inspeccion {
-  id: string
-  nombreInspeccion: string
-  lugarInspeccion: string
-  fechaInspeccion: string
-  descripcion: string
-  nombreApellido: string
-  matricula: string
-  capturedFrames: string[]
-  recordingTime: number
-  createdAt: string
-  recordings?: string[]
-}
+import type { InspeccionData } from "@/lib/database"
 
 export default function EditarInspeccionPage() {
   const router = useRouter()
   const params = useParams()
-  const { getInspeccionById, updateInspeccion } = useDatabase()
-  const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
+  const { getInspeccionById, updateInspeccion, currentUser, hasPermission } = useDatabase()
+  const [inspeccion, setInspeccion] = useState<InspeccionData | null>(null)
   
   // Función para obtener la fecha local en formato YYYY-MM-DD sin problemas de zona horaria
   const getLocalDateString = () => {
@@ -50,12 +37,15 @@ export default function EditarInspeccionPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
 
+  const inspeccionId = params?.id as string | undefined
+
   // Load inspection data
   useEffect(() => {
+    if (!inspeccionId) return
     const loadInspeccion = async () => {
-      console.log('Loading inspeccion for edit, ID:', params.id)
+      console.log('Loading inspeccion for edit, ID:', inspeccionId)
       try {
-        const found = await getInspeccionById(params.id as string)
+        const found = await getInspeccionById(inspeccionId)
         console.log('Found inspeccion for edit:', found)
         if (found) {
           setInspeccion(found)
@@ -73,8 +63,8 @@ export default function EditarInspeccionPage() {
         // Fallback to localStorage
         const data = localStorage.getItem("inspecciones")
         if (data) {
-          const inspecciones: Inspeccion[] = JSON.parse(data)
-          const found = inspecciones.find((i) => i.id === params.id)
+          const inspecciones: InspeccionData[] = JSON.parse(data)
+          const found = inspecciones.find((i) => i.id === inspeccionId)
           if (found) {
             setInspeccion(found)
             setFormData({
@@ -92,7 +82,16 @@ export default function EditarInspeccionPage() {
       }
     }
     loadInspeccion()
-  }, [params.id, getInspeccionById])
+  }, [inspeccionId, getInspeccionById])
+
+  useEffect(() => {
+    if (!inspeccion || !currentUser || isLoading) return
+    const canEditAll = hasPermission('canEditAllInspecciones')
+    const canCreateAndOwn = hasPermission('canCreateInspecciones') && inspeccion.createdBy === currentUser.id
+    if (!canEditAll && !canCreateAndOwn) {
+      router.replace("/listado-inspecciones")
+    }
+  }, [inspeccion, currentUser, hasPermission, isLoading, router])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -160,7 +159,7 @@ export default function EditarInspeccionPage() {
       // Fallback to localStorage
       const data = localStorage.getItem("inspecciones")
       if (data) {
-        const inspecciones: Inspeccion[] = JSON.parse(data)
+        const inspecciones: InspeccionData[] = JSON.parse(data)
         const updatedInspecciones = inspecciones.map((i) =>
           i.id === inspeccion.id
             ? {

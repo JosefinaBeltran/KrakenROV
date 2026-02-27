@@ -129,6 +129,31 @@ export function useDatabase() {
     }
   }, [])
 
+  // Normalize profile permissions so every key is a boolean (fixes incomplete data from DB/import)
+  const normalizePermissions = useCallback((p: ProfilePermissions | null | undefined): ProfilePermissions | null => {
+    if (!p || typeof p !== 'object') return null
+    const def: ProfilePermissions = {
+      canCreateInspecciones: false,
+      canViewAllInspecciones: false,
+      canEditAllInspecciones: false,
+      canDeleteInspecciones: false,
+      canExportData: false,
+      canImportData: false,
+      canManageUsers: false,
+      canClearAllData: false
+    }
+    return {
+      canCreateInspecciones: Boolean(p.canCreateInspecciones),
+      canViewAllInspecciones: Boolean(p.canViewAllInspecciones),
+      canEditAllInspecciones: Boolean(p.canEditAllInspecciones),
+      canDeleteInspecciones: Boolean(p.canDeleteInspecciones),
+      canExportData: Boolean(p.canExportData),
+      canImportData: Boolean(p.canImportData),
+      canManageUsers: Boolean(p.canManageUsers),
+      canClearAllData: Boolean(p.canClearAllData)
+    }
+  }, [])
+
   // Load current user from session
   const loadCurrentUser = useCallback(async () => {
     try {
@@ -143,7 +168,7 @@ export function useDatabase() {
           setCurrentUser(user)
           if (user.profileId) {
             const profile = await localDB.getProfileById(user.profileId)
-            setCurrentUserPermissions(profile?.permissions ?? null)
+            setCurrentUserPermissions(normalizePermissions(profile?.permissions) ?? null)
           } else {
             setCurrentUserPermissions(null)
           }
@@ -162,7 +187,7 @@ export function useDatabase() {
       console.error('Error loading current user:', error)
       setCurrentUser(null)
     }
-  }, [])
+  }, [normalizePermissions])
 
   // User operations
   const saveUser = useCallback(async (user: Omit<User, 'id' | 'createdAt'>) => {
@@ -226,7 +251,7 @@ export function useDatabase() {
       setCurrentUser(user)
       if (user.profileId) {
         const profile = await localDB.getProfileById(user.profileId)
-        setCurrentUserPermissions(profile?.permissions ?? null)
+        setCurrentUserPermissions(normalizePermissions(profile?.permissions) ?? null)
       } else {
         setCurrentUserPermissions(null)
       }
@@ -320,11 +345,11 @@ export function useDatabase() {
     return USER_PERMISSIONS[userRole] || USER_PERMISSIONS.operator
   }, [])
 
-  // Check if user has permission (from profile if profileId, else from legacy role)
+  // Check if user has permission (from profile if profileId, else from legacy role). Always returns boolean.
   const hasPermission = useCallback((permission: keyof typeof USER_PERMISSIONS.superuser) => {
     if (!currentUser) return false
-    if (currentUserPermissions) return currentUserPermissions[permission]
-    return getUserPermissions(currentUser.role)[permission]
+    if (currentUserPermissions) return Boolean(currentUserPermissions[permission])
+    return Boolean(getUserPermissions(currentUser.role)[permission])
   }, [currentUser, currentUserPermissions, getUserPermissions])
 
   const getUser = useCallback(async (username: string) => {
@@ -497,18 +522,28 @@ export function useDatabase() {
 
   const updateInspeccion = useCallback(async (inspeccion: InspeccionData) => {
     if (!isInitialized) return
+    if (!currentUser) throw new Error('Debe iniciar sesión para editar una inspección')
+    const canEditAll = Boolean(currentUserPermissions?.canEditAllInspecciones)
+    const canCreateAndOwn = Boolean(currentUserPermissions?.canCreateInspecciones) && inspeccion.createdBy === currentUser.id
+    if (!canEditAll && !canCreateAndOwn) {
+      throw new Error('No tiene permiso para editar esta inspección')
+    }
     const updatedInspeccion = {
       ...inspeccion,
       updatedAt: new Date().toISOString()
     }
     await localDB.updateInspeccion(updatedInspeccion)
     return updatedInspeccion
-  }, [isInitialized])
+  }, [isInitialized, currentUser, currentUserPermissions])
 
   const deleteInspeccion = useCallback(async (id: string) => {
     if (!isInitialized) return
+    if (!currentUser) throw new Error('Debe iniciar sesión para eliminar una inspección')
+    if (!currentUserPermissions?.canDeleteInspecciones) {
+      throw new Error('No tiene permiso para eliminar inspecciones')
+    }
     await localDB.deleteInspeccion(id)
-  }, [isInitialized])
+  }, [isInitialized, currentUser, currentUserPermissions])
 
   // Temporary inspeccion data operations
   const saveTempInspeccionData = useCallback(async (data: Omit<TempInspeccionData, 'id' | 'createdAt'>) => {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Images, FileText, Video, Calendar, MapPin, User, FileCheck } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
+import type { InspeccionData } from "@/lib/database"
 
 interface Inspeccion {
   id: string
@@ -21,33 +22,48 @@ interface Inspeccion {
   createdAt: string
 }
 
+interface InspeccionWithCreatedBy extends Inspeccion {
+  createdBy?: string
+}
+
 export default function DetalleInspeccionPage() {
   const router = useRouter()
   const params = useParams()
-  const { getInspeccionById } = useDatabase()
-  const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
+  const inspeccionId = params?.id as string | undefined
+  const { getInspeccionById, currentUser, hasPermission } = useDatabase()
+  const [inspeccion, setInspeccion] = useState<InspeccionWithCreatedBy | null>(null)
 
   useEffect(() => {
+    if (!inspeccionId) return
     const loadInspeccion = async () => {
-      console.log('Loading inspeccion details for ID:', params.id)
+      console.log('Loading inspeccion details for ID:', inspeccionId)
       try {
-        const found = await getInspeccionById(params.id as string)
+        const found = await getInspeccionById(inspeccionId)
         console.log('Found inspeccion in database:', found)
-        setInspeccion(found || null)
+        setInspeccion(found ? { ...found, createdBy: (found as InspeccionData)?.createdBy } as InspeccionWithCreatedBy : null)
       } catch (error) {
         console.error('Error loading inspeccion:', error)
         // Fallback to localStorage
         const data = localStorage.getItem("inspecciones")
         if (data) {
-          const inspecciones: Inspeccion[] = JSON.parse(data)
-          const found = inspecciones.find((i) => i.id === params.id)
+          const inspecciones: InspeccionWithCreatedBy[] = JSON.parse(data)
+          const found = inspecciones.find((i) => i.id === inspeccionId)
           console.log('Found inspeccion in localStorage:', found)
           setInspeccion(found || null)
         }
       }
     }
     loadInspeccion()
-  }, [params.id, getInspeccionById])
+  }, [inspeccionId, getInspeccionById])
+
+  useEffect(() => {
+    if (!inspeccion || !currentUser) return
+    const canViewAll = hasPermission('canViewAllInspecciones')
+    const isOwner = inspeccion.createdBy === currentUser.id
+    if (!canViewAll && !isOwner) {
+      router.replace("/listado-inspecciones")
+    }
+  }, [inspeccion, currentUser, hasPermission, router])
 
   const formatDate = (dateString: string) => {
     // Si la fecha viene en formato YYYY-MM-DD, parsearla correctamente sin conversión de zona horaria

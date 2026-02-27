@@ -121,7 +121,12 @@ export default function GestionPerfilesPage() {
 
   const handleEditClick = (profile: Profile) => {
     setFormName(profile.name)
-    setFormPermissions(formFromPermissions(profile.permissions))
+    const base = formFromPermissions(profile.permissions)
+    // El perfil administrador siempre muestra y mantiene canManageUsers marcado
+    if (profile.id === PROFILE_SUPERUSER_ID) {
+      base.canManageUsers = true
+    }
+    setFormPermissions(base)
     setEditProfile(profile)
     setCreateOpen(true)
   }
@@ -150,6 +155,10 @@ export default function GestionPerfilesPage() {
     try {
       const now = new Date().toISOString()
       const permissions = permissionsFromForm(formPermissions)
+      // El perfil administrador siempre debe tener canManageUsers
+      if (editProfile?.id === PROFILE_SUPERUSER_ID) {
+        permissions.canManageUsers = true
+      }
       const trimmedName = formName.trim()
       let savedProfile: Profile
       if (editProfile) {
@@ -301,7 +310,7 @@ export default function GestionPerfilesPage() {
                         disabled={isProcessing}
                       >
                         <Pencil className="w-4 h-4 mr-1" />
-                        Editar permisos
+                        Editar
                       </Button>
                       <Button
                         variant="outline"
@@ -342,18 +351,24 @@ export default function GestionPerfilesPage() {
               </div>
               <div className="space-y-3">
                 <Label>Permisos</Label>
-                {PERMISSION_OPTIONS.map(({ key, label }) => (
-                  <div key={key} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`perm-${key}`}
-                      checked={formPermissions[key]}
-                      onCheckedChange={(checked) => toggleFormPermission(key, checked === true)}
-                    />
-                    <label htmlFor={`perm-${key}`} className="text-sm font-medium leading-none cursor-pointer">
-                      {label}
-                    </label>
-                  </div>
-                ))}
+                {PERMISSION_OPTIONS.map(({ key, label }) => {
+                  const isSuperuserProfile = editProfile?.id === PROFILE_SUPERUSER_ID
+                  const isManageUsersDisabled = key === 'canManageUsers' && isSuperuserProfile
+                  return (
+                    <div key={key} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`perm-${key}`}
+                        checked={formPermissions[key]}
+                        onCheckedChange={(checked) => !isManageUsersDisabled && toggleFormPermission(key, checked === true)}
+                        disabled={isManageUsersDisabled}
+                      />
+                      <label htmlFor={`perm-${key}`} className={`text-sm font-medium leading-none ${isManageUsersDisabled ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer'}`}>
+                        {label}
+                        {isManageUsersDisabled && <span className="ml-1 text-xs">(obligatorio en perfil administrador)</span>}
+                      </label>
+                    </div>
+                  )
+                })}
               </div>
               <div className="flex gap-2 pt-4">
                 <Button onClick={handleSaveClick} disabled={isProcessing} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">

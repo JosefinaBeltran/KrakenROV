@@ -1,15 +1,17 @@
 // Backup and restore service for complete data export/import
-import { localDB, InspeccionData, User, Session } from './database'
+import { localDB, InspeccionData, User, Session, Profile } from './database'
 
 export interface BackupData {
   version: string
   timestamp: string
   inspecciones: InspeccionData[]
   users: User[]
+  profiles: Profile[]
   sessions: Session[]
   metadata: {
     totalInspecciones: number
     totalUsers: number
+    totalProfiles: number
     totalSessions: number
     backupDate: string
     appVersion: string
@@ -28,11 +30,15 @@ class BackupService {
       const inspecciones = await localDB.getAllInspecciones()
       console.log('Retrieved inspecciones:', inspecciones.length)
       
-      // Get users (if any)
-      const users: User[] = [] // For now, we don't have a getAllUsers method
+      // Get users and profiles
+      const users: User[] = await localDB.getAllUsers()
+      console.log('Retrieved users:', users.length)
+
+      const profiles: Profile[] = await localDB.getAllProfiles()
+      console.log('Retrieved profiles:', profiles.length)
       
-      // Get sessions (if any)
-      const sessions: Session[] = [] // For now, we don't have a getAllSessions method
+      // Get sessions (optional – currently not exported in detail)
+      const sessions: Session[] = [] // Placeholder: implement getAllSessions in localDB if needed
       
       // Create backup data structure
       const backupData: BackupData = {
@@ -40,10 +46,12 @@ class BackupService {
         timestamp: new Date().toISOString(),
         inspecciones,
         users,
+        profiles,
         sessions,
         metadata: {
           totalInspecciones: inspecciones.length,
           totalUsers: users.length,
+          totalProfiles: profiles.length,
           totalSessions: sessions.length,
           backupDate: new Date().toISOString(),
           appVersion: this.version
@@ -93,7 +101,7 @@ class BackupService {
       const text = await file.text()
       const backupData: BackupData = JSON.parse(text)
       
-      // Validate backup data structure
+      // Validate backup data structure (soporta backups antiguos sin usuarios/perfiles)
       if (!this.validateBackupData(backupData)) {
         throw new Error('Invalid backup file format')
       }
@@ -182,9 +190,23 @@ class BackupService {
       if (errors.length > 0) {
         console.warn('Import errors:', errors)
       }
-      
+
+      // Import profiles (if any)
+      const profilesToImport = Array.isArray((backupData as any).profiles) ? backupData.profiles : []
+      if (profilesToImport.length > 0) {
+        for (const profile of profilesToImport) {
+          try {
+            await localDB.saveProfile(profile)
+            console.log('Imported profile:', profile.id)
+          } catch (error) {
+            console.error('Error importing profile:', profile.id, error)
+          }
+        }
+      }
+
       // Import users (if any)
-      for (const user of backupData.users) {
+      const usersToImport = Array.isArray((backupData as any).users) ? backupData.users : []
+      for (const user of usersToImport) {
         try {
           await localDB.saveUser(user)
           console.log('Imported user:', user.id)
@@ -194,7 +216,8 @@ class BackupService {
       }
       
       // Import sessions (if any)
-      for (const session of backupData.sessions) {
+      const sessionsToImport = Array.isArray((backupData as any).sessions) ? backupData.sessions : []
+      for (const session of sessionsToImport) {
         try {
           await localDB.saveSession(session)
           console.log('Imported session:', session.id)
@@ -242,8 +265,6 @@ class BackupService {
       typeof data.version === 'string' &&
       typeof data.timestamp === 'string' &&
       Array.isArray(data.inspecciones) &&
-      Array.isArray(data.users) &&
-      Array.isArray(data.sessions) &&
       data.metadata &&
       typeof data.metadata.totalInspecciones === 'number'
     )
@@ -259,14 +280,20 @@ class BackupService {
         throw new Error('Invalid backup file format')
       }
       
+      const metadata: any = backupData.metadata || {}
+      const usersArray = Array.isArray((backupData as any).users) ? backupData.users : []
+      const profilesArray = Array.isArray((backupData as any).profiles) ? backupData.profiles : []
+      const sessionsArray = Array.isArray((backupData as any).sessions) ? backupData.sessions : []
+
       return {
         success: true,
         info: {
           version: backupData.version,
-          backupDate: backupData.metadata.backupDate,
-          totalInspecciones: backupData.metadata.totalInspecciones,
-          totalUsers: backupData.metadata.totalUsers,
-          totalSessions: backupData.metadata.totalSessions,
+          backupDate: metadata.backupDate,
+          totalInspecciones: metadata.totalInspecciones,
+          totalUsers: typeof metadata.totalUsers === 'number' ? metadata.totalUsers : usersArray.length,
+          totalProfiles: typeof metadata.totalProfiles === 'number' ? metadata.totalProfiles : profilesArray.length,
+          totalSessions: typeof metadata.totalSessions === 'number' ? metadata.totalSessions : sessionsArray.length,
           filename: file.name,
           size: file.size
         }

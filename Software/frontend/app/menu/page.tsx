@@ -75,42 +75,46 @@ export default function MenuPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <Card className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col h-full">
-            <CardHeader className="text-center">
-              <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-                <ClipboardList className="w-8 h-8 text-primary-foreground" />
-              </div>
-              <CardTitle className="text-xl">Iniciar Inspección</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col flex-1">
-              <div className="mt-auto">
-                <Button
-                  className="w-full btn-primary"
-                  onClick={() => router.push("/formulario-inspeccion")}
-                >
-                  Comenzar Nueva Inspección
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {currentUser && hasPermission('canCreateInspecciones') && (
+            <Card className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col h-full">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
+                  <ClipboardList className="w-8 h-8 text-primary-foreground" />
+                </div>
+                <CardTitle className="text-xl">Iniciar Inspección</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col flex-1">
+                <div className="mt-auto">
+                  <Button
+                    className="w-full btn-primary"
+                    onClick={() => router.push("/formulario-inspeccion")}
+                  >
+                    Comenzar Nueva Inspección
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-          <Card className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col h-full">
-            <CardHeader className="text-center">
-              <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-                <ClipboardList className="w-8 h-8 text-primary-foreground" />
-              </div>
-              <CardTitle className="text-xl">Inspecciones</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col flex-1">
-              <div className="mt-auto">
-                <Button 
-                  className="w-full btn-primary"
-                  onClick={() => router.push("/listado-inspecciones")}>
-                  Ver Inspecciones Realizadas
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {currentUser && hasPermission('canViewAllInspecciones') && (
+            <Card className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col h-full">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
+                  <ClipboardList className="w-8 h-8 text-primary-foreground" />
+                </div>
+                <CardTitle className="text-xl">Inspecciones</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col flex-1">
+                <div className="mt-auto">
+                  <Button 
+                    className="w-full btn-primary"
+                    onClick={() => router.push("/listado-inspecciones")}>
+                    Ver Inspecciones Realizadas
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {currentUser && hasPermission('canExportData') && (
             <Card className="cursor-pointer hover:bg-card/80 transition-colors flex flex-col h-full">

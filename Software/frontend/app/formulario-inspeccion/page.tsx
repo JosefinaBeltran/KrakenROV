@@ -13,7 +13,19 @@ import { toast } from "sonner"
 
 export default function FormularioInspeccionPage() {
   const router = useRouter()
-  const { saveTempInspeccionData, currentUser } = useDatabase()
+  const { saveTempInspeccionData, currentUser, hasPermission, isLoading } = useDatabase()
+
+  useEffect(() => {
+    if (isLoading) return // Esperar a que termine de cargar la sesión
+    if (!currentUser) {
+      router.replace("/login")
+      return
+    }
+    if (!hasPermission('canCreateInspecciones')) {
+      toast.error('No tiene permiso para iniciar inspecciones')
+      router.replace("/menu")
+    }
+  }, [isLoading, currentUser, hasPermission, router])
   // Función para obtener la fecha local en formato YYYY-MM-DD sin problemas de zona horaria
   const getLocalDateString = () => {
     const now = new Date()
@@ -102,6 +114,17 @@ export default function FormularioInspeccionPage() {
       matricula: currentUser?.matricula || "",
     }))
     setErrors({})
+  }
+
+  if (isLoading || (currentUser && !hasPermission('canCreateInspecciones'))) {
+    if (isLoading) {
+      return (
+        <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+          <p className="text-muted-foreground">Cargando...</p>
+        </div>
+      )
+    }
+    return null
   }
 
   const handleSiguiente = async () => {

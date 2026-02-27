@@ -33,12 +33,13 @@ interface Inspeccion {
   capturedFrames: string[]
   recordingTime: number
   createdAt: string
+  createdBy?: string
   recordings?: string[]
 }
 
 export default function ListadoInspeccionesPage() {
   const router = useRouter()
-  const { getAllInspecciones, deleteInspeccion } = useDatabase()
+  const { getAllInspecciones, deleteInspeccion, currentUser, hasPermission, isLoading } = useDatabase()
   const [inspecciones, setInspecciones] = useState<Inspeccion[]>([])
   const [filteredInspecciones, setFilteredInspecciones] = useState<Inspeccion[]>([])
   const [sortBy, setSortBy] = useState<"nombre" | "fecha">("fecha")
@@ -52,6 +53,15 @@ export default function ListadoInspeccionesPage() {
   const [deleteInspeccionId, setDeleteInspeccionId] = useState<string | null>(null)
 
   useEffect(() => {
+    if (isLoading) return // Esperar a que termine de cargar la sesión
+    if (!currentUser) {
+      router.replace("/login")
+      return
+    }
+    if (!hasPermission('canViewAllInspecciones')) {
+      router.replace("/menu")
+      return
+    }
     const loadInspecciones = async () => {
       console.log('Loading inspecciones from database...')
       try {
@@ -66,7 +76,7 @@ export default function ListadoInspeccionesPage() {
       }
     }
     loadInspecciones()
-  }, [getAllInspecciones])
+  }, [getAllInspecciones, isLoading, currentUser, hasPermission, router])
 
   useEffect(() => {
     let filtered = [...inspecciones]
@@ -170,8 +180,17 @@ export default function ListadoInspeccionesPage() {
       setDeleteInspeccionId(null)
     } catch (error) {
       console.error('Error deleting inspeccion:', error)
-      toast.error('Error al eliminar la inspección. Por favor, intente nuevamente.')
+      const message = error instanceof Error ? error.message : 'Error al eliminar la inspección. Por favor, intente nuevamente.'
+      toast.error(message)
     }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <p className="text-muted-foreground">Cargando...</p>
+      </div>
+    )
   }
 
   return (
@@ -314,22 +333,26 @@ export default function ListadoInspeccionesPage() {
                         {inspeccion.nombreInspeccion}
                       </CardTitle>
                       <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => handleEditInspeccion(e, inspeccion.id)}
-                          className="h-8 w-8 p-0 hover:bg-white/20 text-white hover:text-white"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={(e) => handleDeleteInspeccionClick(e, inspeccion.id)}
-                          className="h-8 w-8 p-0 hover:bg-red-500/20 text-white hover:text-white"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {(hasPermission('canEditAllInspecciones') || (hasPermission('canCreateInspecciones') && inspeccion.createdBy === currentUser?.id)) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => handleEditInspeccion(e, inspeccion.id)}
+                            className="h-8 w-8 p-0 hover:bg-white/20 text-white hover:text-white"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {hasPermission('canDeleteInspecciones') && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => handleDeleteInspeccionClick(e, inspeccion.id)}
+                            className="h-8 w-8 p-0 hover:bg-red-500/20 text-white hover:text-white"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardHeader>
