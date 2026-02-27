@@ -66,8 +66,7 @@ export default function LoginPage() {
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <h3 className="text-sm font-medium text-blue-800 mb-2">Usuarios Disponibles:</h3>
               <div className="text-xs text-blue-700 space-y-1">
-                <p><strong>Super Usuario:</strong> admin / admin123</p>
-                <p><strong>Operador:</strong> operador / operador123</p>
+                <p><strong>Usuario administrador:</strong> KrakenROV/ krakenrov123</p>
               </div>
             </div>
 

@@ -43,10 +43,10 @@ const DEFAULT_PERMISSIONS: ProfilePermissions = {
 }
 
 const PERMISSION_OPTIONS: { key: keyof ProfilePermissions; label: string }[] = [
-  { key: 'canCreateInspecciones', label: 'Poder iniciar una inspección' },
-  { key: 'canViewAllInspecciones', label: 'Poder ver todas las inspecciones' },
-  { key: 'canExportData', label: 'Poder importar, exportar y eliminar todos los datos' },
-  { key: 'canManageUsers', label: 'Poder gestionar los usuarios y perfiles' }
+  { key: 'canCreateInspecciones', label: 'Iniciar una inspección' },
+  { key: 'canViewAllInspecciones', label: 'Ver todas las inspecciones' },
+  { key: 'canExportData', label: 'Importar, exportar y eliminar datos' },
+  { key: 'canManageUsers', label: 'Gestionar usuarios y perfiles' }
 ]
 
 // "Poder importar, exportar y eliminar" maps to multiple keys

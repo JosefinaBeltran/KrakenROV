@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,7 @@ import { toast } from "sonner"
 
 export default function FormularioInspeccionPage() {
   const router = useRouter()
-  const { saveTempInspeccionData } = useDatabase()
+  const { saveTempInspeccionData, currentUser } = useDatabase()
   // Función para obtener la fecha local en formato YYYY-MM-DD sin problemas de zona horaria
   const getLocalDateString = () => {
     const now = new Date()
@@ -32,6 +32,31 @@ export default function FormularioInspeccionPage() {
     matricula: "",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Rellenar por defecto nombre completo y matrícula del usuario actual
+  useEffect(() => {
+    if (!currentUser) return
+
+    setFormData((prev) => {
+      // Solo autocompletar si los campos están vacíos para no pisar cambios del usuario
+      const shouldFillNombre = !prev.nombreApellido.trim()
+      const shouldFillMatricula = !prev.matricula.trim()
+
+      if (!shouldFillNombre && !shouldFillMatricula) {
+        return prev
+      }
+
+      return {
+        ...prev,
+        nombreApellido: shouldFillNombre
+          ? currentUser.displayName || currentUser.name || prev.nombreApellido
+          : prev.nombreApellido,
+        matricula: shouldFillMatricula
+          ? currentUser.matricula || prev.matricula
+          : prev.matricula,
+      }
+    })
+  }, [currentUser])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -66,14 +91,16 @@ export default function FormularioInspeccionPage() {
   }
 
   const handleLimpiar = () => {
-    setFormData({
+    setFormData((prev) => ({
+      ...prev,
       nombreInspeccion: "",
       lugarInspeccion: "",
       fechaInspeccion: getLocalDateString(), // Mantener fecha actual al limpiar usando zona horaria local
       descripcion: "",
-      nombreApellido: "",
-      matricula: "",
-    })
+      nombreApellido:
+        currentUser?.displayName || currentUser?.name || "",
+      matricula: currentUser?.matricula || "",
+    }))
     setErrors({})
   }
 

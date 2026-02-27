@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +9,26 @@ import { useDatabase } from "@/hooks/useDatabase"
 
 export default function MenuPage() {
   const router = useRouter()
-  const { clearSession, currentUser, hasPermission, reloadCurrentUser } = useDatabase()
+  const { clearSession, currentUser, hasPermission, reloadCurrentUser, getProfileById } = useDatabase()
+  const [profileName, setProfileName] = useState<string | null>(null)
+
+  useEffect(() => {
+    const loadProfileName = async () => {
+      if (currentUser?.profileId) {
+        try {
+          const profile = await getProfileById(currentUser.profileId)
+          setProfileName(profile?.name ?? null)
+        } catch (error) {
+          console.error("Error loading profile for current user:", error)
+          setProfileName(null)
+        }
+      } else {
+        setProfileName(null)
+      }
+    }
+
+    loadProfileName()
+  }, [currentUser?.profileId, getProfileById])
 
   const handleLogout = async () => {
     try {
@@ -31,7 +51,8 @@ export default function MenuPage() {
             <h1 className="text-3xl font-bold text-foreground">Menú Principal</h1>
             {currentUser && (
               <p className="text-sm text-muted-foreground mt-1">
-                Bienvenido, {currentUser.displayName} ({currentUser.role === 'superuser' ? 'Super Usuario' : 'Operador'})
+                Bienvenido, {currentUser.displayName}
+                {profileName && ` (${profileName})`}
               </p>
             )}
           </div>

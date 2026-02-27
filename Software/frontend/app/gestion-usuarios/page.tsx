@@ -534,6 +534,12 @@ export default function GestionUsuariosPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredUsers.map((user) => {
               const isInactive = user.active === false
+              const isCurrentUser = user.id === currentUser?.id
+              const isKrakenUser = user.id === KRAKENROV_USER_ID
+              const isAdminProfile = user.profileId === 'profile-superuser' || user.role === 'superuser'
+              const showFullActions = !isCurrentUser && !isKrakenUser
+              const showSelfEdit = isCurrentUser && isAdminProfile && !isKrakenUser
+
               return (
                 <Card key={user.id} className={`hover:bg-card/80 transition-colors ${isInactive ? 'opacity-60 bg-muted/30' : ''}`}>
                   <CardHeader>
@@ -546,38 +552,44 @@ export default function GestionUsuariosPage() {
                         )}
                         <CardTitle className="text-lg">{user.displayName}</CardTitle>
                       </div>
-                      {user.id !== currentUser?.id && user.id !== KRAKENROV_USER_ID && (
+                      {(showFullActions || showSelfEdit) && (
                         <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditClick(user)}
-                            disabled={isProcessing}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleActive(user)}
-                            disabled={isProcessing}
-                            title={user.active === false ? 'Activar usuario' : 'Desactivar usuario'}
-                          >
-                            {user.active === false ? (
-                              <User className="w-4 h-4 text-green-600" />
-                            ) : (
-                              <User className="w-4 h-4 text-gray-400" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeleteTarget(user)}
-                            disabled={isProcessing}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {(showFullActions || showSelfEdit) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditClick(user)}
+                              disabled={isProcessing}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {showFullActions && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleToggleActive(user)}
+                                disabled={isProcessing}
+                                title={user.active === false ? 'Activar usuario' : 'Desactivar usuario'}
+                              >
+                                {user.active === false ? (
+                                  <User className="w-4 h-4 text-green-600" />
+                                ) : (
+                                  <User className="w-4 h-4 text-gray-400" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setDeleteTarget(user)}
+                                disabled={isProcessing}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
