@@ -41,6 +41,7 @@ export default function GaleriaCapturas() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [showDeleteFrameDialog, setShowDeleteFrameDialog] = useState(false)
   const [frameToDelete, setFrameToDelete] = useState<number | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const loadInspeccion = async () => {
@@ -58,6 +59,8 @@ export default function GaleriaCapturas() {
           const found = inspecciones.find((i) => i.id === params.id)
           setInspeccion(found || null)
         }
+      } finally {
+        setIsLoading(false)
       }
     }
     loadInspeccion()
@@ -135,6 +138,19 @@ export default function GaleriaCapturas() {
       }
     }
     setShowDeleteFrameDialog(false)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-xl font-semibold mb-2">Cargando...</h3>
+            <p className="text-muted-foreground">Obteniendo galería de capturas</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (!inspeccion) {

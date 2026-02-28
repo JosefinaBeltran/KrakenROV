@@ -60,6 +60,7 @@ export default function VisorVideoPage() {
   const params = useParams()
   const { getInspeccionById, updateInspeccion } = useDatabase()
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
+  const [isLoadingInspeccion, setIsLoadingInspeccion] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -82,7 +83,10 @@ export default function VisorVideoPage() {
 
   useEffect(() => {
     const loadInspeccion = async () => {
-      if (!params?.id) return
+      if (!params?.id) {
+        setIsLoadingInspeccion(false)
+        return
+      }
       console.log('Loading inspeccion for video viewer, ID:', params.id)
       try {
         const found = await getInspeccionById(params.id as string)
@@ -103,6 +107,8 @@ export default function VisorVideoPage() {
             setYoutubeLink(found.youtubeLink || "")
           }
         }
+      } finally {
+        setIsLoadingInspeccion(false)
       }
     }
     
@@ -702,6 +708,19 @@ export default function VisorVideoPage() {
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
+
+  if (isLoadingInspeccion) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-xl font-semibold mb-2">Cargando...</h3>
+            <p className="text-muted-foreground">Obteniendo datos del visor de video</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (!inspeccion) {
     return (

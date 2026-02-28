@@ -73,7 +73,7 @@ function formFromPermissions(permissions: ProfilePermissions): Record<keyof Prof
 
 export default function GestionPerfilesPage() {
   const router = useRouter()
-  const { getAllProfiles, saveProfile, deleteProfile, getUsersByProfileId, currentUser, hasPermission, isInitialized } = useDatabase()
+  const { getAllProfiles, saveProfile, deleteProfile, getUsersByProfileId, currentUser, hasPermission, isInitialized, isLoading: isSessionLoading } = useDatabase()
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
@@ -232,6 +232,19 @@ export default function GestionPerfilesPage() {
       }
       return next
     })
+  }
+
+  if (isSessionLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-xl font-semibold mb-2">Cargando...</h3>
+            <p className="text-muted-foreground">Verificando permisos</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (!currentUser || !hasPermission('canManageUsers')) {

@@ -61,7 +61,7 @@ function PasswordRequirements({ password }: { password: string }) {
 
 export default function GestionUsuariosPage() {
   const router = useRouter()
-  const { getAllUsers, getAllProfiles, deleteUser, register, updateUser, isInitialized, currentUser, hasPermission, getUserByMatricula } = useDatabase()
+  const { getAllUsers, getAllProfiles, deleteUser, register, updateUser, isInitialized, currentUser, hasPermission, getUserByMatricula, isLoading: isSessionLoading } = useDatabase()
   const [users, setUsers] = useState<UserType[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -327,6 +327,19 @@ export default function GestionUsuariosPage() {
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  if (isSessionLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-xl font-semibold mb-2">Cargando...</h3>
+            <p className="text-muted-foreground">Verificando permisos</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (!currentUser || !hasPermission('canManageUsers')) {

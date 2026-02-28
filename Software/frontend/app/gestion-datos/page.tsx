@@ -19,7 +19,7 @@ import {
 
 export default function GestionDatosPage() {
   const router = useRouter()
-  const { exportAllData, importData, getBackupInfo, clearAllData, isInitialized, currentUser, hasPermission } = useDatabase()
+  const { exportAllData, importData, getBackupInfo, clearAllData, isInitialized, currentUser, hasPermission, isLoading } = useDatabase()
   const [isProcessing, setIsProcessing] = useState(false)
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -128,6 +128,20 @@ export default function GestionDatosPage() {
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  // Show loading while session/permissions are being resolved
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-xl font-semibold mb-2">Cargando...</h3>
+            <p className="text-muted-foreground">Verificando permisos</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   // Check if user has permission

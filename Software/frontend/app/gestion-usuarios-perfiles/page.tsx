@@ -8,7 +8,20 @@ import { useDatabase } from "@/hooks/useDatabase"
 
 export default function GestionUsuariosPerfilesPage() {
   const router = useRouter()
-  const { currentUser, hasPermission } = useDatabase()
+  const { currentUser, hasPermission, isLoading } = useDatabase()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-xl font-semibold mb-2">Cargando...</h3>
+            <p className="text-muted-foreground">Verificando permisos</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (!currentUser || !hasPermission('canManageUsers')) {
     return (

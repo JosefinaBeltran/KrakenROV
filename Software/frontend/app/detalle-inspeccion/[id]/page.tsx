@@ -32,9 +32,13 @@ export default function DetalleInspeccionPage() {
   const inspeccionId = params?.id as string | undefined
   const { getInspeccionById, currentUser, hasPermission } = useDatabase()
   const [inspeccion, setInspeccion] = useState<InspeccionWithCreatedBy | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    if (!inspeccionId) return
+    if (!inspeccionId) {
+      setIsLoading(false)
+      return
+    }
     const loadInspeccion = async () => {
       console.log('Loading inspeccion details for ID:', inspeccionId)
       try {
@@ -51,6 +55,8 @@ export default function DetalleInspeccionPage() {
           console.log('Found inspeccion in localStorage:', found)
           setInspeccion(found || null)
         }
+      } finally {
+        setIsLoading(false)
       }
     }
     loadInspeccion()
@@ -90,6 +96,19 @@ export default function DetalleInspeccionPage() {
     const mins = Math.floor((seconds % 3600) / 60)
     const secs = Math.floor(seconds % 60)
     return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-xl font-semibold mb-2">Cargando...</h3>
+            <p className="text-muted-foreground">Obteniendo datos de la inspección</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (!inspeccion) {
