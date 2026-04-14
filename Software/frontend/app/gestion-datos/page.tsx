@@ -20,7 +20,8 @@ import {
 export default function GestionDatosPage() {
   const router = useRouter()
   const { exportAllData, importData, getBackupInfo, clearAllData, isInitialized, currentUser, hasPermission, isLoading } = useDatabase()
-  const [isProcessing, setIsProcessing] = useState(false)
+  type ProcessingAction = "export" | "import" | "clear" | null
+  const [processingAction, setProcessingAction] = useState<ProcessingAction>(null)
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importConfirm, setImportConfirm] = useState<{ file: File; info: { filename: string; backupDate: string; totalInspecciones: number; size: number } } | null>(null)
@@ -29,7 +30,7 @@ export default function GestionDatosPage() {
   const handleExportData = async () => {
     if (!isInitialized) return
     
-    setIsProcessing(true)
+    setProcessingAction("export")
     setStatus(null)
     
     try {
@@ -53,7 +54,7 @@ export default function GestionDatosPage() {
         message: 'Error al exportar los datos'
       })
     } finally {
-      setIsProcessing(false)
+      setProcessingAction(null)
     }
   }
 
@@ -80,7 +81,7 @@ export default function GestionDatosPage() {
 
   const handleImportConfirm = async () => {
     if (!importConfirm) return
-    setIsProcessing(true)
+    setProcessingAction("import")
     setStatus(null)
     try {
       const result = await importData(importConfirm.file)
@@ -101,7 +102,7 @@ export default function GestionDatosPage() {
       console.error('Import error:', error)
       setStatus({ success: false, message: 'Error al importar los datos' })
     } finally {
-      setIsProcessing(false)
+      setProcessingAction(null)
       setImportConfirm(null)
     }
   }
@@ -113,7 +114,7 @@ export default function GestionDatosPage() {
   const handleClearAllDataConfirm = async () => {
     if (!isInitialized) return
     setClearConfirmOpen(false)
-    setIsProcessing(true)
+    setProcessingAction("clear")
     setStatus(null)
     try {
       const result = await clearAllData()
@@ -126,7 +127,7 @@ export default function GestionDatosPage() {
       console.error('Clear data error:', error)
       setStatus({ success: false, message: 'Error al eliminar los datos' })
     } finally {
-      setIsProcessing(false)
+      setProcessingAction(null)
     }
   }
 
@@ -206,11 +207,11 @@ export default function GestionDatosPage() {
               <div className="mt-auto">
                 <Button 
                   onClick={handleExportData}
-                  disabled={isProcessing || !isInitialized}
+                  disabled={processingAction !== null || !isInitialized}
                   className="w-full"
                   variant="outline"
                 >
-                  {isProcessing ? (
+                  {processingAction === "export" ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
                       Exportando...
@@ -248,11 +249,11 @@ export default function GestionDatosPage() {
               <div className="mt-auto">
                 <Button 
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isProcessing || !isInitialized}
+                  disabled={processingAction !== null || !isInitialized}
                   className="w-full"
                   variant="outline"
                 >
-                  {isProcessing ? (
+                  {processingAction === "import" ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
                       Importando...
@@ -283,11 +284,11 @@ export default function GestionDatosPage() {
                 <div className="mt-auto">
                   <Button 
                     onClick={() => setClearConfirmOpen(true)}
-                    disabled={isProcessing || !isInitialized}
+                    disabled={processingAction !== null || !isInitialized}
                     className="w-full"
                     variant="outline"
                   >
-                    {isProcessing ? (
+                    {processingAction === "clear" ? (
                       <>
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
                         Eliminando...
@@ -326,7 +327,7 @@ export default function GestionDatosPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => { setImportConfirm(null); setStatus({ success: false, message: 'Importación cancelada' }); }}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleImportConfirm} disabled={isProcessing}>Importar</AlertDialogAction>
+              <AlertDialogAction onClick={handleImportConfirm} disabled={processingAction !== null}>Importar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -341,7 +342,7 @@ export default function GestionDatosPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleClearAllDataConfirm} disabled={isProcessing} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              <AlertDialogAction onClick={handleClearAllDataConfirm} disabled={processingAction !== null} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                 Eliminar todo
               </AlertDialogAction>
             </AlertDialogFooter>

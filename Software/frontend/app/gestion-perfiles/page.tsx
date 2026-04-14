@@ -35,6 +35,7 @@ const DEFAULT_PERMISSIONS: ProfilePermissions = {
   canCreateInspecciones: false,
   canViewAllInspecciones: false,
   canEditAllInspecciones: false,
+  canEditInspecciones: false,
   canDeleteInspecciones: false,
   canExportData: false,
   canImportData: false,
@@ -45,6 +46,7 @@ const DEFAULT_PERMISSIONS: ProfilePermissions = {
 const PERMISSION_OPTIONS: { key: keyof ProfilePermissions; label: string }[] = [
   { key: 'canCreateInspecciones', label: 'Iniciar una inspección' },
   { key: 'canViewAllInspecciones', label: 'Ver todas las inspecciones' },
+  { key: 'canEditInspecciones', label: 'Editar inspecciones (galería de capturas y visor de video)' },
   { key: 'canExportData', label: 'Importar, exportar y eliminar datos' },
   { key: 'canManageUsers', label: 'Gestionar usuarios y perfiles' }
 ]
@@ -125,6 +127,7 @@ export default function GestionPerfilesPage() {
     // El perfil administrador siempre muestra y mantiene canManageUsers marcado
     if (profile.id === PROFILE_SUPERUSER_ID) {
       base.canManageUsers = true
+      base.canEditInspecciones = true
     }
     setFormPermissions(base)
     setEditProfile(profile)
@@ -367,17 +370,20 @@ export default function GestionPerfilesPage() {
                 {PERMISSION_OPTIONS.map(({ key, label }) => {
                   const isSuperuserProfile = editProfile?.id === PROFILE_SUPERUSER_ID
                   const isManageUsersDisabled = key === 'canManageUsers' && isSuperuserProfile
+                  const isEditInspeccionesDisabled = key === 'canEditInspecciones' && isSuperuserProfile
+                  const isCheckboxDisabled = isManageUsersDisabled || isEditInspeccionesDisabled
                   return (
                     <div key={key} className="flex items-center space-x-2">
                       <Checkbox
                         id={`perm-${key}`}
                         checked={formPermissions[key]}
-                        onCheckedChange={(checked) => !isManageUsersDisabled && toggleFormPermission(key, checked === true)}
-                        disabled={isManageUsersDisabled}
+                        onCheckedChange={(checked) => !isCheckboxDisabled && toggleFormPermission(key, checked === true)}
+                        disabled={isCheckboxDisabled}
                       />
-                      <label htmlFor={`perm-${key}`} className={`text-sm font-medium leading-none ${isManageUsersDisabled ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer'}`}>
+                      <label htmlFor={`perm-${key}`} className={`text-sm font-medium leading-none ${isCheckboxDisabled ? 'cursor-not-allowed text-muted-foreground' : 'cursor-pointer'}`}>
                         {label}
                         {isManageUsersDisabled && <span className="ml-1 text-xs">(obligatorio en perfil administrador)</span>}
+                        {isEditInspeccionesDisabled && <span className="ml-1 text-xs">(obligatorio en perfil administrador)</span>}
                       </label>
                     </div>
                   )

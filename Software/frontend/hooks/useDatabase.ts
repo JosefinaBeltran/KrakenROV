@@ -4,11 +4,97 @@ import { backupService } from '@/lib/backupService'
 import { getPredefinedUsers, DEFAULT_PASSWORDS, USER_PERMISSIONS, UserRole, KRAKENROV_USER_ID } from '@/lib/users'
 import { hashPassword, verifyPassword, validatePasswordStrength } from '@/lib/password'
 
+function arraysContentChanged<T>(a: T[] | undefined, b: T[] | undefined): boolean {
+  const aa = a ?? []
+  const bb = b ?? []
+  if (aa.length !== bb.length) return true
+  for (let i = 0; i < aa.length; i++) {
+    if (aa[i] !== bb[i]) return true
+  }
+  return false
+}
+
+/** Resumen de campos modificados (sin volcar base64 completo en el log). */
+function summarizeInspeccionChanges(prev: InspeccionData, next: InspeccionData): Record<string, unknown> {
+  const delta: Record<string, unknown> = {}
+  const scalarKeys: (keyof InspeccionData)[] = [
+    'nombreInspeccion',
+    'lugarInspeccion',
+    'fechaInspeccion',
+    'descripcion',
+    'nombreApellido',
+    'matricula',
+    'recordingTime',
+    'youtubeLink',
+    'observaciones',
+    'syncedToCloud',
+  ]
+  for (const k of scalarKeys) {
+    if (prev[k] !== next[k]) {
+      delta[String(k)] = { desde: prev[k], hacia: next[k] }
+    }
+  }
+  if (arraysContentChanged(prev.capturedFrames, next.capturedFrames)) {
+    delta.capturedFrames = {
+      cantidadAntes: prev.capturedFrames?.length ?? 0,
+      cantidadDespues: next.capturedFrames?.length ?? 0,
+      mismaCantidad: (prev.capturedFrames?.length ?? 0) === (next.capturedFrames?.length ?? 0),
+    }
+  }
+  if (arraysContentChanged(prev.recordings, next.recordings)) {
+    delta.recordings = {
+      cantidadAntes: prev.recordings?.length ?? 0,
+      cantidadDespues: next.recordings?.length ?? 0,
+      mismaCantidad: (prev.recordings?.length ?? 0) === (next.recordings?.length ?? 0),
+    }
+  }
+  if (JSON.stringify(prev.sensorCharts ?? null) !== JSON.stringify(next.sensorCharts ?? null)) {
+    delta.sensorCharts = {
+      antes: prev.sensorCharts ? 'presente' : 'ausente',
+      despues: next.sensorCharts ? 'presente' : 'ausente',
+    }
+  }
+  if (arraysContentChanged(prev.reportImages, next.reportImages)) {
+    delta.reportImages = {
+      cantidadAntes: prev.reportImages?.length ?? 0,
+      cantidadDespues: next.reportImages?.length ?? 0,
+    }
+  }
+  return delta
+}
+
 export function useDatabase() {
   const [isInitialized, setIsInitialized] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [currentUserPermissions, setCurrentUserPermissions] = useState<ProfilePermissions | null>(null)
+
+  const logSystemEvent = useCallback(async (
+    eventType: string,
+    message: string,
+    options?: {
+      severity?: "INFO" | "WARN" | "ERROR" | "SECURITY"
+      user?: string
+      context?: Record<string, unknown>
+    }
+  ) => {
+    try {
+      await fetch("/api/system-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType,
+          message,
+          severity: options?.severity ?? "INFO",
+          user: options?.user,
+          context: options?.context,
+        }),
+      })
+    } catch (error) {
+      // Never block app flows because of logging failures.
+      console.error("Could not send system log:", error)
+    }
+  }, [])
 
   useEffect(() => {
     const initDB = async () => {
@@ -27,13 +113,17 @@ export function useDatabase() {
         setIsInitialized(true)
       } catch (error) {
         console.error('Failed to initialize database:', error)
+        await logSystemEvent("SYSTEM_INIT_ERROR", "Fallo al inicializar la base de datos", {
+          severity: "ERROR",
+          context: { error: error instanceof Error ? error.message : "Unknown error" }
+        })
       } finally {
         setIsLoading(false)
       }
     }
 
     initDB()
-  }, [])
+  }, [logSystemEvent])
 
   // Initialize predefined profiles
   const initializePredefinedProfiles = useCallback(async () => {
@@ -45,6 +135,7 @@ export function useDatabase() {
         canViewAllInspecciones: true,
         canCreateInspecciones: true,
         canEditAllInspecciones: true,
+        canEditInspecciones: true,
         canDeleteInspecciones: true,
         canExportData: true,
         canImportData: true,
@@ -56,6 +147,7 @@ export function useDatabase() {
         canViewAllInspecciones: true,
         canCreateInspecciones: true,
         canEditAllInspecciones: false,
+        canEditInspecciones: false,
         canDeleteInspecciones: false,
         canExportData: false,
         canImportData: false,
@@ -136,6 +228,7 @@ export function useDatabase() {
       canCreateInspecciones: false,
       canViewAllInspecciones: false,
       canEditAllInspecciones: false,
+      canEditInspecciones: false,
       canDeleteInspecciones: false,
       canExportData: false,
       canImportData: false,
@@ -146,6 +239,7 @@ export function useDatabase() {
       canCreateInspecciones: Boolean(p.canCreateInspecciones),
       canViewAllInspecciones: Boolean(p.canViewAllInspecciones),
       canEditAllInspecciones: Boolean(p.canEditAllInspecciones),
+      canEditInspecciones: Boolean(p.canEditInspecciones),
       canDeleteInspecciones: Boolean(p.canDeleteInspecciones),
       canExportData: Boolean(p.canExportData),
       canImportData: Boolean(p.canImportData),
@@ -204,6 +298,10 @@ export function useDatabase() {
   // Login with username and password
   const login = useCallback(async (username: string, password: string): Promise<{ success: boolean; user?: User; error?: string }> => {
     if (!isInitialized) {
+      await logSystemEvent("LOGIN_ERROR", "Intento de inicio de sesión con base no inicializada", {
+        severity: "ERROR",
+        context: { username }
+      })
       return { success: false, error: 'Database not initialized' }
     }
 
@@ -211,11 +309,20 @@ export function useDatabase() {
       // Find user by username in database
       const user = await localDB.getUser(username)
       if (!user) {
+        await logSystemEvent("UNAUTHORIZED_ACCESS", "Intento de acceso con usuario inexistente", {
+          severity: "SECURITY",
+          context: { username }
+        })
         return { success: false, error: 'Usuario no encontrado' }
       }
 
       // Check if user is active
       if (user.active === false) {
+        await logSystemEvent("UNAUTHORIZED_ACCESS", "Intento de acceso con usuario desactivado", {
+          severity: "SECURITY",
+          user: user.username,
+          context: { userId: user.id }
+        })
         return { success: false, error: 'Este usuario está desactivado. Contacte al administrador.' }
       }
 
@@ -224,6 +331,11 @@ export function useDatabase() {
         // Legacy user without password hash, check against DEFAULT_PASSWORDS
         const expectedPassword = DEFAULT_PASSWORDS[user.id]
         if (password !== expectedPassword) {
+          await logSystemEvent("LOGIN_FAILED", "Contraseña incorrecta", {
+            severity: "SECURITY",
+            user: user.username,
+            context: { userId: user.id }
+          })
           return { success: false, error: 'Contraseña incorrecta' }
         }
         // Update user with hashed password
@@ -234,6 +346,11 @@ export function useDatabase() {
         // Verify password hash
         const isValid = await verifyPassword(password, user.passwordHash)
         if (!isValid) {
+          await logSystemEvent("LOGIN_FAILED", "Contraseña incorrecta", {
+            severity: "SECURITY",
+            user: user.username,
+            context: { userId: user.id }
+          })
           return { success: false, error: 'Contraseña incorrecta' }
         }
       }
@@ -256,16 +373,24 @@ export function useDatabase() {
         setCurrentUserPermissions(null)
       }
       console.log('User logged in:', user.username, 'with role:', user.role)
+      await logSystemEvent("LOGIN_SUCCESS", "Inicio de sesión exitoso", {
+        user: user.username,
+        context: { userId: user.id, role: user.role, profileId: user.profileId ?? null }
+      })
       return { success: true, user }
       
     } catch (error) {
       console.error('Login error:', error)
+      await logSystemEvent("LOGIN_ERROR", "Error durante inicio de sesión", {
+        severity: "ERROR",
+        context: { username, error: error instanceof Error ? error.message : "Unknown error" }
+      })
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Error de login' 
       }
     }
-  }, [isInitialized])
+  }, [isInitialized, logSystemEvent])
 
   // Register new user (profileId optional; defaults to operator profile)
   const register = useCallback(async (
@@ -276,12 +401,20 @@ export function useDatabase() {
     profileId?: string
   ): Promise<{ success: boolean; user?: User; error?: string }> => {
     if (!isInitialized) {
+      await logSystemEvent("USER_REGISTER_ERROR", "Intento de registro con base no inicializada", {
+        severity: "ERROR",
+        context: { username }
+      })
       return { success: false, error: 'Database not initialized' }
     }
 
     try {
       // Validate inputs
       if (!username || !password || !nombreCompleto || !matricula) {
+        await logSystemEvent("USER_REGISTER_FAILED", "Registro fallido por datos incompletos", {
+          severity: "WARN",
+          context: { username, matricula }
+        })
         return { success: false, error: 'Todos los campos son requeridos' }
       }
 
@@ -297,12 +430,20 @@ export function useDatabase() {
       // Check if username already exists
       const existingUserByUsername = await localDB.getUser(username)
       if (existingUserByUsername) {
+        await logSystemEvent("USER_REGISTER_FAILED", "Registro fallido por usuario duplicado", {
+          severity: "WARN",
+          context: { username }
+        })
         return { success: false, error: 'El nombre de usuario ya existe' }
       }
 
       // Check if matricula already exists
       const existingUserByMatricula = await localDB.getUserByMatricula(matricula)
       if (existingUserByMatricula) {
+        await logSystemEvent("USER_REGISTER_FAILED", "Registro fallido por matrícula duplicada", {
+          severity: "WARN",
+          context: { matricula }
+        })
         return { success: false, error: 'La matrícula ya está registrada' }
       }
 
@@ -328,17 +469,25 @@ export function useDatabase() {
       // Save user to database
       await localDB.saveUser(newUser)
       console.log('User registered:', newUser.username)
+      await logSystemEvent("USER_REGISTERED", "Usuario registrado exitosamente", {
+        user: currentUser?.username,
+        context: { newUserId: newUser.id, username: newUser.username, profileId: newUser.profileId }
+      })
 
       return { success: true, user: newUser }
       
     } catch (error) {
       console.error('Registration error:', error)
+      await logSystemEvent("USER_REGISTER_ERROR", "Error durante registro de usuario", {
+        severity: "ERROR",
+        context: { username, error: error instanceof Error ? error.message : "Unknown error" }
+      })
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Error al registrar usuario' 
       }
     }
-  }, [isInitialized])
+  }, [isInitialized, currentUser?.username, logSystemEvent])
 
   // Get user permissions
   const getUserPermissions = useCallback((userRole: UserRole) => {
@@ -375,7 +524,11 @@ export function useDatabase() {
     }
     const withUpdated = { ...user, updatedAt: new Date().toISOString() }
     await localDB.saveUser(withUpdated)
-  }, [isInitialized])
+    await logSystemEvent("USER_UPDATED", "Usuario actualizado", {
+      user: currentUser?.username,
+      context: { targetUserId: user.id, username: user.username }
+    })
+  }, [isInitialized, currentUser?.username, logSystemEvent])
 
   // Profile operations
   const getAllProfiles = useCallback(async () => {
@@ -391,7 +544,11 @@ export function useDatabase() {
   const saveProfile = useCallback(async (profile: Profile) => {
     if (!isInitialized) return
     await localDB.saveProfile(profile)
-  }, [isInitialized])
+    await logSystemEvent("CONFIG_CHANGED", "Perfil/permisos actualizados", {
+      user: currentUser?.username,
+      context: { profileId: profile.id, profileName: profile.name }
+    })
+  }, [isInitialized, currentUser?.username, logSystemEvent])
 
   const getUsersByProfileId = useCallback(async (profileId: string) => {
     if (!isInitialized) return []
@@ -416,7 +573,12 @@ export function useDatabase() {
     }
     
     await localDB.deleteProfile(id)
-  }, [isInitialized, getUsersByProfileId])
+    await logSystemEvent("CONFIG_CHANGED", "Perfil eliminado", {
+      severity: "WARN",
+      user: currentUser?.username,
+      context: { profileId: id, reassignedUsers: usersWithProfile.length }
+    })
+  }, [isInitialized, getUsersByProfileId, currentUser?.username, logSystemEvent])
 
   const deleteUser = useCallback(async (userId: string) => {
     if (!isInitialized) return { success: false, error: 'Database not initialized' }
@@ -424,24 +586,44 @@ export function useDatabase() {
     try {
       // Prevent deleting the current user
       if (currentUser && currentUser.id === userId) {
+        await logSystemEvent("UNAUTHORIZED_ACCESS", "Intento de eliminar su propio usuario", {
+          severity: "SECURITY",
+          user: currentUser.username,
+          context: { userId }
+        })
         return { success: false, error: 'No puedes eliminar tu propio usuario' }
       }
       
       // Prevent deleting predefined user
       if (userId === KRAKENROV_USER_ID) {
+        await logSystemEvent("UNAUTHORIZED_ACCESS", "Intento de eliminar usuario predefinido", {
+          severity: "SECURITY",
+          user: currentUser?.username,
+          context: { userId }
+        })
         return { success: false, error: 'No se puede eliminar el usuario predefinido del sistema' }
       }
       
       await localDB.deleteUser(userId)
+      await logSystemEvent("USER_DELETED", "Usuario eliminado", {
+        severity: "WARN",
+        user: currentUser?.username,
+        context: { deletedUserId: userId }
+      })
       return { success: true }
     } catch (error) {
       console.error('Error deleting user:', error)
+      await logSystemEvent("USER_DELETE_ERROR", "Error al eliminar usuario", {
+        severity: "ERROR",
+        user: currentUser?.username,
+        context: { userId, error: error instanceof Error ? error.message : "Unknown error" }
+      })
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Error al eliminar usuario'
       }
     }
-  }, [isInitialized, currentUser])
+  }, [isInitialized, currentUser, logSystemEvent])
 
   // Session operations
   const saveSession = useCallback(async (session: Omit<Session, 'id' | 'createdAt' | 'lastActivity'>) => {
@@ -463,11 +645,17 @@ export function useDatabase() {
 
   const clearSession = useCallback(async () => {
     if (!isInitialized) return
+    const username = currentUser?.username
+    const userId = currentUser?.id
     await localDB.clearSession()
     setCurrentUser(null)
     setCurrentUserPermissions(null)
     console.log('Session cleared and currentUser reset')
-  }, [isInitialized])
+    await logSystemEvent("LOGOUT", "Cierre de sesión", {
+      user: username,
+      context: { userId }
+    })
+  }, [isInitialized, currentUser?.username, currentUser?.id, logSystemEvent])
 
   // Inspeccion operations
   const saveInspeccion = useCallback(async (inspeccion: Omit<InspeccionData, 'id' | 'createdAt' | 'updatedAt' | 'syncedToCloud' | 'createdBy'>) => {
@@ -490,8 +678,12 @@ export function useDatabase() {
     console.log('Saving inspeccion to database:', dbInspeccion)
     await localDB.saveInspeccion(dbInspeccion)
     console.log('Inspeccion saved successfully to database')
+    await logSystemEvent("INSPECCION_CREATED", "Inspección guardada", {
+      user: currentUser.username,
+      context: { inspeccionId: dbInspeccion.id, nombre: dbInspeccion.nombreInspeccion }
+    })
     return dbInspeccion
-  }, [isInitialized, currentUser])
+  }, [isInitialized, currentUser, logSystemEvent])
 
   const getAllInspecciones = useCallback(async () => {
     if (!isInitialized) {
@@ -523,27 +715,75 @@ export function useDatabase() {
   const updateInspeccion = useCallback(async (inspeccion: InspeccionData) => {
     if (!isInitialized) return
     if (!currentUser) throw new Error('Debe iniciar sesión para editar una inspección')
+    const previous = await localDB.getInspeccionById(inspeccion.id)
+    if (!previous) {
+      throw new Error('Inspección no encontrada')
+    }
     const canEditAll = Boolean(currentUserPermissions?.canEditAllInspecciones)
     const canCreateAndOwn = Boolean(currentUserPermissions?.canCreateInspecciones) && inspeccion.createdBy === currentUser.id
     if (!canEditAll && !canCreateAndOwn) {
+      await logSystemEvent("UNAUTHORIZED_ACCESS", "Intento de editar inspección sin permisos", {
+        severity: "SECURITY",
+        user: currentUser.username,
+        context: { inspeccionId: inspeccion.id }
+      })
       throw new Error('No tiene permiso para editar esta inspección')
+    }
+
+    const canEditMedia = Boolean(
+      currentUserPermissions?.canEditInspecciones || currentUserPermissions?.canEditAllInspecciones,
+    )
+    const mediaOrChartsChanged =
+      arraysContentChanged(previous.capturedFrames, inspeccion.capturedFrames) ||
+      arraysContentChanged(previous.recordings, inspeccion.recordings) ||
+      arraysContentChanged(previous.reportImages, inspeccion.reportImages) ||
+      JSON.stringify(previous.sensorCharts ?? null) !== JSON.stringify(inspeccion.sensorCharts ?? null)
+
+    if (mediaOrChartsChanged && !canEditMedia) {
+      await logSystemEvent("UNAUTHORIZED_ACCESS", "Intento de modificar capturas, grabaciones o gráficos sin permiso Editar inspecciones", {
+        severity: "SECURITY",
+        user: currentUser.username,
+        context: { inspeccionId: inspeccion.id },
+      })
+      throw new Error('No tiene permiso para modificar capturas, grabaciones o gráficos de la inspección')
     }
     const updatedInspeccion = {
       ...inspeccion,
+      // La fecha de inspección es inmutable: corresponde al día en que se creó el registro.
+      fechaInspeccion: previous.fechaInspeccion,
       updatedAt: new Date().toISOString()
     }
     await localDB.updateInspeccion(updatedInspeccion)
+    const cambios = summarizeInspeccionChanges(previous, updatedInspeccion)
+    await logSystemEvent("INSPECCION_UPDATED", "Inspección actualizada", {
+      user: currentUser.username,
+      context: {
+        inspeccionId: inspeccion.id,
+        nombreInspeccion: updatedInspeccion.nombreInspeccion,
+        cambios,
+      }
+    })
     return updatedInspeccion
-  }, [isInitialized, currentUser, currentUserPermissions])
+  }, [isInitialized, currentUser, currentUserPermissions, logSystemEvent])
 
   const deleteInspeccion = useCallback(async (id: string) => {
     if (!isInitialized) return
     if (!currentUser) throw new Error('Debe iniciar sesión para eliminar una inspección')
     if (!currentUserPermissions?.canDeleteInspecciones) {
+      await logSystemEvent("UNAUTHORIZED_ACCESS", "Intento de eliminar inspección sin permisos", {
+        severity: "SECURITY",
+        user: currentUser.username,
+        context: { inspeccionId: id }
+      })
       throw new Error('No tiene permiso para eliminar inspecciones')
     }
     await localDB.deleteInspeccion(id)
-  }, [isInitialized, currentUser, currentUserPermissions])
+    await logSystemEvent("INSPECCION_DELETED", "Inspección eliminada", {
+      severity: "WARN",
+      user: currentUser.username,
+      context: { inspeccionId: id }
+    })
+  }, [isInitialized, currentUser, currentUserPermissions, logSystemEvent])
 
   // Temporary inspeccion data operations
   const saveTempInspeccionData = useCallback(async (data: Omit<TempInspeccionData, 'id' | 'createdAt'>) => {
@@ -598,15 +838,26 @@ export function useDatabase() {
       console.log('Starting data export...')
       const result = await backupService.exportAllData()
       console.log('Data export result:', result)
+      if (result.success) {
+        await logSystemEvent("DATA_EXPORTED", "Exportación de datos exitosa", {
+          user: currentUser?.username,
+          context: { filename: result.filename }
+        })
+      }
       return result
     } catch (error) {
       console.error('Error during data export:', error)
+      await logSystemEvent("DATA_EXPORT_ERROR", "Error al exportar datos", {
+        severity: "ERROR",
+        user: currentUser?.username,
+        context: { error: error instanceof Error ? error.message : "Unknown error" }
+      })
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
-  }, [isInitialized])
+  }, [isInitialized, currentUser?.username, logSystemEvent])
 
   const importData = useCallback(async (file: File) => {
     if (!isInitialized) return { success: false, error: 'Database not initialized' }
@@ -615,15 +866,26 @@ export function useDatabase() {
       console.log('Starting data import...')
       const result = await backupService.importData(file)
       console.log('Data import result:', result)
+      if (result.success) {
+        await logSystemEvent("DATA_IMPORTED", "Importación de datos exitosa", {
+          user: currentUser?.username,
+          context: { filename: file.name, importedCount: result.importedCount ?? null }
+        })
+      }
       return result
     } catch (error) {
       console.error('Error during data import:', error)
+      await logSystemEvent("DATA_IMPORT_ERROR", "Error al importar datos", {
+        severity: "ERROR",
+        user: currentUser?.username,
+        context: { filename: file.name, error: error instanceof Error ? error.message : "Unknown error" }
+      })
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
-  }, [isInitialized])
+  }, [isInitialized, currentUser?.username, logSystemEvent])
 
   const getBackupInfo = useCallback(async (file: File) => {
     try {
@@ -644,15 +906,26 @@ export function useDatabase() {
       console.log('Starting data clear...')
       const result = await backupService.clearAllData()
       console.log('Data clear result:', result)
+      if (result.success) {
+        await logSystemEvent("DATA_CLEARED", "Limpieza total de datos ejecutada", {
+          severity: "WARN",
+          user: currentUser?.username
+        })
+      }
       return result
     } catch (error) {
       console.error('Error during data clear:', error)
+      await logSystemEvent("DATA_CLEAR_ERROR", "Error al limpiar todos los datos", {
+        severity: "ERROR",
+        user: currentUser?.username,
+        context: { error: error instanceof Error ? error.message : "Unknown error" }
+      })
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       }
     }
-  }, [isInitialized])
+  }, [isInitialized, currentUser?.username, logSystemEvent])
 
   // Force reload current user
   const reloadCurrentUser = useCallback(async () => {

@@ -5,7 +5,10 @@
 export interface ProfilePermissions {
   canCreateInspecciones: boolean
   canViewAllInspecciones: boolean
+  /** Editar inspección propia u otras según reglas existentes (formulario, metadatos). */
   canEditAllInspecciones: boolean
+  /** Eliminar capturas en galería / visor y otras ediciones de contenido asociadas a inspección. */
+  canEditInspecciones: boolean
   canDeleteInspecciones: boolean
   canExportData: boolean
   canImportData: boolean
@@ -84,6 +87,7 @@ const DEFAULT_SUPERUSER_PERMISSIONS: ProfilePermissions = {
   canViewAllInspecciones: true,
   canCreateInspecciones: true,
   canEditAllInspecciones: true,
+  canEditInspecciones: true,
   canDeleteInspecciones: true,
   canExportData: true,
   canImportData: true,
@@ -94,6 +98,7 @@ const DEFAULT_OPERATOR_PERMISSIONS: ProfilePermissions = {
   canViewAllInspecciones: true, // Permite consultar inspecciones
   canCreateInspecciones: true, // Permite iniciar inspección
   canEditAllInspecciones: false,
+  canEditInspecciones: false,
   canDeleteInspecciones: false,
   canExportData: false,
   canImportData: false,
@@ -107,7 +112,7 @@ const PROFILE_OPERATOR_ID = 'profile-operator'
 class LocalDatabase {
   private db: IDBDatabase | null = null
   private dbName = 'KrakenROV_DB'
-  private version = 4
+  private version = 5
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -198,6 +203,28 @@ class LocalDatabase {
                   active: true
                 }
                 userStore.put(migrated)
+              }
+            })
+          }
+        }
+
+        // Migrate profiles: add canEditInspecciones (version 4 -> 5)
+        if (oldVersion < 5 && db.objectStoreNames.contains('profiles') && transaction) {
+          const profileStore = transaction.objectStore('profiles')
+          const req = profileStore.getAll()
+          req.onsuccess = () => {
+            const profiles: Profile[] = req.result || []
+            profiles.forEach((p) => {
+              if (p.permissions && p.permissions.canEditInspecciones === undefined) {
+                const migrated: Profile = {
+                  ...p,
+                  permissions: {
+                    ...p.permissions,
+                    canEditInspecciones: p.id === PROFILE_SUPERUSER_ID,
+                  },
+                  updatedAt: new Date().toISOString(),
+                }
+                profileStore.put(migrated)
               }
             })
           }

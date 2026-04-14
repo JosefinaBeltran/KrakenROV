@@ -35,7 +35,7 @@ interface Inspeccion {
 export default function GaleriaCapturas() {
   const router = useRouter()
   const params = useParams()
-  const { getInspeccionById, updateInspeccion } = useDatabase()
+  const { getInspeccionById, updateInspeccion, hasPermission } = useDatabase()
   const [inspeccion, setInspeccion] = useState<Inspeccion | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
@@ -260,14 +260,16 @@ export default function GaleriaCapturas() {
                     <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
                       Captura {index + 1}
                     </div>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={(e) => handleEliminarFrame(e, index)}
-                      className="absolute top-2 right-2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {(hasPermission("canEditInspecciones") || hasPermission("canEditAllInspecciones")) && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={(e) => handleEliminarFrame(e, index)}
+                        className="absolute top-2 right-2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>

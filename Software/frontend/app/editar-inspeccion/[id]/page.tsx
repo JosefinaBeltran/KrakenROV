@@ -17,19 +17,19 @@ export default function EditarInspeccionPage() {
   const { getInspeccionById, updateInspeccion, currentUser, hasPermission } = useDatabase()
   const [inspeccion, setInspeccion] = useState<InspeccionData | null>(null)
   
-  // Función para obtener la fecha local en formato YYYY-MM-DD sin problemas de zona horaria
-  const getLocalDateString = () => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+  /** Normaliza fecha almacenada a YYYY-MM-DD para input type="date". */
+  const toDateInputValue = (fecha: string) => {
+    if (!fecha) return ""
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return fecha
+    const slice = fecha.slice(0, 10)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(slice)) return slice
+    return fecha
   }
   
   const [formData, setFormData] = useState({
     nombreInspeccion: "",
     lugarInspeccion: "",
-    fechaInspeccion: getLocalDateString(), // Always use current date
+    fechaInspeccion: "",
     descripcion: "",
     nombreApellido: "",
     matricula: "",
@@ -52,7 +52,7 @@ export default function EditarInspeccionPage() {
           setFormData({
             nombreInspeccion: found.nombreInspeccion,
             lugarInspeccion: found.lugarInspeccion,
-            fechaInspeccion: getLocalDateString(), // Always use current date
+            fechaInspeccion: toDateInputValue(found.fechaInspeccion),
             descripcion: found.descripcion,
             nombreApellido: found.nombreApellido,
             matricula: found.matricula,
@@ -70,7 +70,7 @@ export default function EditarInspeccionPage() {
             setFormData({
               nombreInspeccion: found.nombreInspeccion,
               lugarInspeccion: found.lugarInspeccion,
-              fechaInspeccion: getLocalDateString(), // Always use current date
+              fechaInspeccion: toDateInputValue(found.fechaInspeccion),
               descripcion: found.descripcion,
               nombreApellido: found.nombreApellido,
               matricula: found.matricula,
@@ -110,7 +110,9 @@ export default function EditarInspeccionPage() {
     if (!formData.lugarInspeccion.trim()) {
       newErrors.lugarInspeccion = "El lugar de la inspección es requerido"
     }
-    // No need to validate fecha since it's always set to current date
+    if (!formData.fechaInspeccion.trim()) {
+      newErrors.fechaInspeccion = "La fecha de la inspección no está disponible"
+    }
     if (!formData.descripcion.trim()) {
       newErrors.descripcion = "La descripción es requerida"
     }
@@ -130,7 +132,7 @@ export default function EditarInspeccionPage() {
       setFormData({
         nombreInspeccion: inspeccion.nombreInspeccion,
         lugarInspeccion: inspeccion.lugarInspeccion,
-        fechaInspeccion: getLocalDateString(), // Always use current date
+        fechaInspeccion: toDateInputValue(inspeccion.fechaInspeccion),
         descripcion: inspeccion.descripcion,
         nombreApellido: inspeccion.nombreApellido,
         matricula: inspeccion.matricula,
@@ -147,7 +149,7 @@ export default function EditarInspeccionPage() {
         ...inspeccion,
         nombreInspeccion: formData.nombreInspeccion,
         lugarInspeccion: formData.lugarInspeccion,
-        fechaInspeccion: getLocalDateString(), // Always use current date
+        fechaInspeccion: inspeccion.fechaInspeccion,
         descripcion: formData.descripcion,
         nombreApellido: formData.nombreApellido,
         matricula: formData.matricula,
@@ -166,7 +168,7 @@ export default function EditarInspeccionPage() {
                 ...i,
                 nombreInspeccion: formData.nombreInspeccion,
                 lugarInspeccion: formData.lugarInspeccion,
-                fechaInspeccion: getLocalDateString(), // Always use current date
+                fechaInspeccion: inspeccion.fechaInspeccion,
                 descripcion: formData.descripcion,
                 nombreApellido: formData.nombreApellido,
                 matricula: formData.matricula,
@@ -266,7 +268,7 @@ export default function EditarInspeccionPage() {
                   disabled
                   className="bg-muted border-border cursor-not-allowed opacity-70"
                 />
-                <p className="text-xs text-muted-foreground">La fecha se actualiza automáticamente al día actual</p>
+                <p className="text-xs text-muted-foreground">Fecha original de la inspección; no se puede modificar al editar.</p>
               </div>
 
               <div className="space-y-2">
