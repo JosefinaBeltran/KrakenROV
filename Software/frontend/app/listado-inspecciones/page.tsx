@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, FileText, Calendar, MapPin, Filter, Edit, Trash2, ArrowUpDown } from "lucide-react"
+import { ArrowLeft, FileText, Calendar, MapPin, Filter, Edit, Trash2, ArrowUpDown, Clock } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import { toast } from "sonner"
 import {
@@ -33,6 +33,7 @@ interface Inspeccion {
   capturedFrames: string[]
   recordingTime: number
   createdAt: string
+  updatedAt?: string
   createdBy?: string
   recordings?: string[]
 }
@@ -370,6 +371,11 @@ export default function ListadoInspeccionesPage() {
 
                     <div className="pt-2 border-t border-white/20">
                       <p className="text-sm text-white/90 drop-shadow-md">Operador: {inspeccion.nombreApellido}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-sm text-white/90 drop-shadow-md pt-2">
+                      <Clock className="w-4 h-4" />
+                      <span>Modificado: {formatDate(inspeccion.updatedAt || inspeccion.createdAt)}</span>
                     </div>
 
                     <div className="mt-auto pt-2">

@@ -7,8 +7,9 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Calendar, MapPin, FileCheck, Upload, ImageIcon, Printer as Print, User, Clock, CreditCard } from "lucide-react"
+import { ArrowLeft, Calendar, MapPin, FileCheck, Upload, ImageIcon, Printer as Print, User, Clock, CreditCard, Save } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
+import { toast } from "sonner"
 import SensorCharts from "@/components/SensorCharts"
 
 interface Inspeccion {
@@ -146,6 +147,11 @@ export default function InformeInspeccionPage() {
   const handleImprimirInforme = () => {
     saveObservaciones()
     window.print()
+  }
+
+  const handleGuardarInforme = async () => {
+    await saveObservaciones()
+    toast.success("Cambios guardados correctamente")
   }
 
   if (isLoading) {
@@ -383,8 +389,16 @@ export default function InformeInspeccionPage() {
           </Button>
 
           <Button
+            onClick={handleGuardarInforme}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Guardar
+          </Button>
+
+          <Button
             onClick={handleImprimirInforme}
-            className="btn-primary"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             <Print className="w-4 h-4 mr-2" />
             Imprimir

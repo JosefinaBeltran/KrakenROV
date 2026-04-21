@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Images, FileText, Video, Calendar, MapPin, User, FileCheck } from "lucide-react"
+import { ArrowLeft, Images, FileText, Video, Calendar, MapPin, User, FileCheck, Clock } from "lucide-react"
 import { useDatabase } from "@/hooks/useDatabase"
 import type { InspeccionData } from "@/lib/database"
 
@@ -20,6 +20,7 @@ interface Inspeccion {
   recordingTime: number
   recordings?: string[]
   createdAt: string
+  updatedAt?: string
 }
 
 interface InspeccionWithCreatedBy extends Inspeccion {
@@ -165,6 +166,14 @@ export default function DetalleInspeccionPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Fecha de la inspección</p>
                   <p className="font-medium">{formatDate(inspeccion.fechaInspeccion)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Clock className="w-5 h-5 text-primary" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Última modificación</p>
+                  <p className="font-medium">{formatDate(inspeccion.updatedAt || inspeccion.createdAt)}</p>
                 </div>
               </div>
 
